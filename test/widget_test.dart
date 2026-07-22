@@ -2,16 +2,28 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gaze/main.dart';
 import 'package:gaze/playback/playback_controller.dart';
-import 'package:gaze/playback/playback_test_screen.dart';
 
 void main() {
-  testWidgets('shows all playback spike controls and status', (tester) async {
+  testWidgets('shows the desktop shell by default', (tester) async {
     final controller = FakePlaybackController();
 
-    await tester.pumpWidget(
-      MaterialApp(home: PlaybackTestScreen(controller: controller)),
-    );
+    await tester.pumpWidget(GazeApp(controller: controller));
+
+    expect(find.text('g'), findsOneWidget);
+    expect(find.text('Your music, brought forward.'), findsOneWidget);
+    expect(find.text('Recently added'), findsOneWidget);
+    expect(find.text('Nothing playing'), findsOneWidget);
+    expect(find.text('Northern Lines'), findsOneWidget);
+  });
+
+  testWidgets('keeps the playback technical test reachable', (tester) async {
+    final controller = FakePlaybackController();
+
+    await tester.pumpWidget(GazeApp(controller: controller));
+    await tester.tap(find.byTooltip('Open the playback technical test'));
+    await tester.pumpAndSettle();
 
     expect(find.text('gaze playback technical test'), findsOneWidget);
     expect(find.text('Choose local audio file'), findsOneWidget);

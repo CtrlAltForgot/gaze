@@ -2,6 +2,24 @@
 
 The plan deliberately favors small, verifiable steps. A phase begins only after the previous phase's exit check passes. Package choices named below are candidates until a focused spike confirms them.
 
+## Product outcome
+
+gaze should bring personally owned music libraries back to life through a premium, artwork-led desktop experience. Apple Music sets the quality bar for beauty, animation, and presentation; Spotify provides a reference for familiar, intuitive organization. gaze must interpret those qualities through an original interface built around the listener's own Jellyfin-hosted library rather than copying either service.
+
+The experience should make albums feel valuable, browsing feel effortless, and local ownership feel as polished and convenient as a commercial streaming service. Server and playback complexity must remain behind the interface so the listener experiences music, artwork, and clear choices rather than infrastructure.
+
+## Current position and next milestones
+
+- **Complete:** repository and Flutter desktop foundation on Linux.
+- **Complete:** generated Linux, Windows, and macOS runners; Windows and macOS validation remains pending on their respective operating systems.
+- **Complete:** Linux playback foundation selection and local media controls using media-kit.
+- **Next:** Phase 2, a small desktop visual foundation using in-memory sample content and mandatory manual UI review.
+- **Then:** Phase 3, pure Dart music-library models and application contracts.
+- **Then:** Phase 4, secure Jellyfin connection followed by one read-only library slice.
+- **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
+
+Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
+
 ## Phase 0 — foundation and decisions
 
 **Goal:** establish a safe repository and prove the intended toolchain.
@@ -36,13 +54,17 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 
 **Goal:** create the original gaze visual system and application shell without server or playback complexity.
 
-- Define color, typography, spacing, shape, elevation, motion, and focus tokens.
-- Build the desktop window shell, navigation, content area, and persistent player-bar layout using sample in-memory models.
-- Define wide, medium, and compact desktop behavior, including an optional queue region.
-- Add keyboard focus, screen-reader labels, touch targets, and reduced-motion behavior.
-- Build a small visual gallery for reusable controls and artwork treatments.
+**Current status:** in progress. The first responsive desktop shell, provisional design tokens, sample artwork grid, navigation structure, and nonfunctional player placeholder passed automated checks and received initial manual visual approval on Linux. This confirms the direction, not the finished design. Broader width review, keyboard traversal, focus behavior, touch sizing, reduced motion, and component refinement remain.
 
-**Exit check:** widget tests pass and the shell is reviewed at representative desktop widths, keyboard-only, touch-sized, light/dark where supported, and reduced motion.
+- Document and implement the first color, typography, spacing, shape, elevation, motion, and focus tokens without treating them as final branding.
+- Replace the disposable playback test as the default route with a basic desktop shell while keeping the diagnostic screen isolated and reachable during development.
+- Build only the structural regions needed to review desktop composition: navigation, main content, and a nonfunctional player-bar placeholder using in-memory sample content.
+- Define wide, medium, and compact desktop behavior. Reserve space conceptually for a future optional queue region without implementing the queue.
+- Add keyboard focus, screen-reader labels, touch targets, and reduced-motion behavior.
+- Review the shell for artwork emphasis, information density, intuitive hierarchy, and originality against `DESIGN_DIRECTION.md`.
+- Run the complete visual-testing workflow in `AGENTS.md` and obtain manual approval before committing each meaningful visible step.
+
+**Exit check:** automated checks pass and the user manually approves the shell at representative desktop widths. Keyboard traversal, touch-sized targets, focus visibility, and reduced-motion behavior are reviewed. No server connection or working production player is required.
 
 ## Phase 3 — reusable domain and application core
 
@@ -52,6 +74,7 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 - Define repository, playback, queue, and cache interfaces.
 - Implement small use cases such as loading a home section and changing favorites against fakes.
 - Define immutable playback and queue state plus deterministic queue operations.
+- Keep these models independent of Flutter widgets, media-kit, HTTP, databases, and Jellyfin response formats so a future mobile client can reuse them.
 
 **Exit check:** pure Dart unit tests cover domain rules and shared packages import no desktop or Flutter APIs.
 
@@ -59,18 +82,22 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 
 **Goal:** authenticate safely and browse a real Jellyfin music library.
 
-- Implement Jellyfin HTTP transport, authentication, pagination, error mapping, and DTO-to-domain mapping.
-- Store the access token through an OS credential-store adapter; keep server configuration separately.
-- Add connection setup, recently added, albums, artists, and basic search one slice at a time.
+- Confirm the Jellyfin server/API version and connection expectations without recording a private address, username, or token in the repository.
+- Compare current cross-platform HTTP and secure credential-storage packages before adding dependencies; document Linux, Windows, and macOS support and native requirements.
+- Implement Jellyfin HTTP transport, authentication, session expiry, pagination, error mapping, and DTO-to-domain mapping behind repository interfaces.
+- Store the access token through an OS credential-store adapter; keep the non-secret server configuration separately.
+- Create sanitized response fixtures containing no personal server, account, or library information.
+- Add connection setup and one read-only library slice first, preferably recently added albums. Add broader album, artist, and search capabilities only in later focused tasks.
 - Handle unreachable servers, expired sessions, malformed responses, empty libraries, and cancellation.
 
-**Exit check:** contract tests use sanitized fixtures, unit tests use a fake transport, and a documented manual test can browse the intended server without exposing credentials.
+**Exit check:** contract tests use sanitized fixtures, unit tests use a fake transport, secrets are absent from Git and logs, and a documented manual test can authenticate and browse the first read-only library slice on the intended server.
 
 ## Phase 5 — playback adapter and basic player
 
 **Goal:** integrate the backend selected by the early spike behind a maintainable playback boundary.
 
-- Reconfirm the selected backend against authenticated Jellyfin direct-play and transcoded URLs without persisting credentials in diagnostics.
+- Generate authenticated Jellyfin direct-play and transcoded URLs inside the Jellyfin adapter without persisting credentials or private URLs in diagnostics.
+- Reconfirm the selected backend against those real Jellyfin sources; generic public remote-URL testing is not required.
 - Verify error recovery and representative library formats beyond the feasibility cases.
 - Implement the engine-neutral playback contract and its selected backend adapter, then connect it to the persistent player bar.
 - Report playback progress and stop events to Jellyfin.

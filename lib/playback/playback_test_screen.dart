@@ -1,14 +1,13 @@
-import 'dart:async';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'playback_controller.dart';
 
 class PlaybackTestScreen extends StatefulWidget {
-  const PlaybackTestScreen({required this.controller, super.key});
+  const PlaybackTestScreen({required this.controller, this.onClose, super.key});
 
   final PlaybackController controller;
+  final VoidCallback? onClose;
 
   @override
   State<PlaybackTestScreen> createState() => _PlaybackTestScreenState();
@@ -21,7 +20,6 @@ class _PlaybackTestScreenState extends State<PlaybackTestScreen> {
   @override
   void dispose() {
     _urlController.dispose();
-    unawaited(widget.controller.dispose());
     super.dispose();
   }
 
@@ -62,7 +60,16 @@ class _PlaybackTestScreenState extends State<PlaybackTestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('gaze playback technical test')),
+      appBar: AppBar(
+        leading: widget.onClose == null
+            ? null
+            : IconButton(
+                onPressed: widget.onClose,
+                tooltip: 'Back to gaze',
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+        title: const Text('gaze playback technical test'),
+      ),
       body: StreamBuilder<PlaybackSnapshot>(
         stream: widget.controller.states,
         initialData: widget.controller.state,
