@@ -101,6 +101,7 @@ class MediaKitPlaybackController implements PlaybackController {
         title: source.title,
         artist: source.artist,
         artworkBytes: source.artworkBytes,
+        itemId: source.itemId,
       ),
     );
     await _run(() async {

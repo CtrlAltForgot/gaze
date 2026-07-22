@@ -110,6 +110,7 @@ class _DesktopShellState extends State<DesktopShell> {
             headers: jellyfinSource.headers,
             title: track.title,
             artist: track.artist,
+            itemId: track.id,
             artworkBytes: album.artworkBytes,
           );
         })

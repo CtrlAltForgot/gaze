@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 
+import 'application/jellyfin_playback_reporter.dart';
 import 'design/gaze_theme.dart';
 import 'desktop/desktop_shell.dart';
 import 'jellyfin/flutter_secure_jellyfin_credential_store.dart';
@@ -57,9 +58,20 @@ class _GazeAppState extends State<GazeApp> {
   late final PlaybackQueueController _queueController = PlaybackQueueController(
     playbackController: widget.playbackController,
   );
+  late final JellyfinPlaybackReporter _playbackReporter;
+
+  @override
+  void initState() {
+    super.initState();
+    _playbackReporter = JellyfinPlaybackReporter(
+      playbackController: widget.playbackController,
+      connectionController: widget.connectionController,
+    );
+  }
 
   @override
   void dispose() {
+    unawaited(_playbackReporter.dispose());
     unawaited(_queueController.dispose());
     unawaited(widget.playbackController.dispose());
     unawaited(widget.connectionController.dispose());

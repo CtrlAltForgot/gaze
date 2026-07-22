@@ -221,6 +221,7 @@ class FakePlaybackController implements PlaybackController {
       title: source.title,
       artist: source.artist,
       artworkBytes: source.artworkBytes,
+      itemId: source.itemId,
     );
     _states.add(_state);
   }
@@ -278,6 +279,17 @@ class FakeJellyfinApi implements JellyfinApi {
     artist: 'Real Artist',
     year: 2026,
   );
+
+  @override
+  Future<void> reportPlayback({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
+  }) async {}
 
   @override
   JellyfinAudioStreamSource createDirectPlaySource({

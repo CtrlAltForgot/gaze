@@ -42,6 +42,42 @@ class HttpJellyfinApi implements JellyfinApi {
   }
 
   @override
+  Future<void> reportPlayback({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
+  }) async {
+    final path = switch (event) {
+      JellyfinPlaybackEvent.start => '/Sessions/Playing',
+      JellyfinPlaybackEvent.progress => '/Sessions/Playing/Progress',
+      JellyfinPlaybackEvent.stopped => '/Sessions/Playing/Stopped',
+    };
+    final response = await _request(
+      () => _client.post(
+        address.endpoint(path),
+        headers: {
+          ..._authenticatedHeaders(session),
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'ItemId': itemId,
+          'PositionTicks': position.inMicroseconds * 10,
+          'IsPaused': paused,
+          'IsMuted': volume <= 0,
+          'VolumeLevel': (volume.clamp(0, 1) * 100).round(),
+          'PlayMethod': 'DirectPlay',
+          'CanSeek': true,
+        }),
+      ),
+    );
+    _requireSuccess(response, operation: 'report playback to Jellyfin');
+  }
+
+  @override
   Future<JellyfinServerInfo> getPublicServerInfo(
     JellyfinServerAddress address,
   ) async {

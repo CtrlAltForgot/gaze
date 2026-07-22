@@ -63,6 +63,45 @@ void main() {
       api.close();
     });
 
+    test('reports playback progress without exposing the token', () async {
+      final client = MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(
+          request.url.toString(),
+          'https://music.example/Sessions/Playing/Progress',
+        );
+        expect(request.url.toString(), isNot(contains('private-access-token')));
+        expect(
+          request.headers['authorization'],
+          contains('private-access-token'),
+        );
+        expect(jsonDecode(request.body), containsPair('ItemId', 'track-id'));
+        expect(
+          jsonDecode(request.body),
+          containsPair('PositionTicks', 120000000),
+        );
+        expect(jsonDecode(request.body), containsPair('IsPaused', true));
+        return http.Response('', 204);
+      });
+      final api = _createApi(client);
+
+      await api.reportPlayback(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        event: JellyfinPlaybackEvent.progress,
+        itemId: 'track-id',
+        position: const Duration(seconds: 12),
+        volume: 0.75,
+        paused: true,
+      );
+
+      api.close();
+    });
+
     test('reads public Jellyfin server information over HTTP', () async {
       final client = MockClient((request) async {
         expect(request.method, 'GET');

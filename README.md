@@ -2,7 +2,7 @@
 
 gaze is a desktop-first music client targeting Linux, Windows, and macOS. Linux on Nobara is the active development and testing platform. gaze will connect to a Jellyfin music library hosted on an Unraid server. The product name is always displayed in lowercase.
 
-The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin connection flow are established. Authentication, session restoration, Albums browsing, authenticated direct playback, the functional player bar, and temporary album queue have been manually verified against the intended Jellyfin server on Linux. The active slice adds Jellyfin playback reporting before broader library pages. Persistent bounded caching for artwork, metadata, and future lyrics remains a dedicated storage phase rather than an unbounded early cache. Windows and macOS runner files are generated but have not been built or run on those operating systems.
+The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin connection flow are established. Authentication, session restoration, Albums browsing, authenticated direct playback, the functional player bar, temporary album queue, and Jellyfin activity reporting have been manually verified against the intended Jellyfin server on Linux. Persistent bounded caching for artwork, metadata, and future lyrics remains a dedicated storage phase rather than an unbounded early cache. Windows and macOS runner files are generated but have not been built or run on those operating systems.
 
 ## Verified development status
 
@@ -11,7 +11,7 @@ The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin
 - **macOS:** runner and build files generated; build and launch validation pending on macOS.
 - **Android, iOS, and web:** outside the current project scope and not generated.
 - **Dependencies:** the playback spike selected `media_kit` and `media_kit_libs_audio`; `file_picker` supports the disposable local-file test.
-- **Jellyfin:** HTTP and HTTPS authentication works on Linux. Tokens and minimum resume information use the OS credential store; passwords are not persisted. Recently added albums, authenticated artwork, and saved-session restoration are manually verified on Linux.
+- **Jellyfin:** HTTP and HTTPS authentication works on Linux. Tokens and minimum resume information use the OS credential store; passwords are not persisted. Recently added albums, authenticated artwork, saved-session restoration, direct playback, and server activity reporting are manually verified on Linux.
 
 The isolated playback spike selected `media_kit` 1.2.6 with `media_kit_libs_audio` 1.0.7 and uses `file_picker` 11.0.2 only for the disposable local-file test. With Fedora/Nobara's `mpv-libs` runtime installed, the backend initializes and local play, pause, resume, seeking, volume, and stop were manually verified on Linux. Authenticated remote playback is deferred to Jellyfin integration. Gapless playback, track completion, long-session stability, Windows, and macOS remain untested. See [docs/PLAYBACK_SPIKE.md](docs/PLAYBACK_SPIKE.md) for the full decision record.
 

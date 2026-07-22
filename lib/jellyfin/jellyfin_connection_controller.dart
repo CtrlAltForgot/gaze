@@ -232,6 +232,25 @@ class JellyfinConnectionController {
     );
   }
 
+  Future<void> reportPlayback({
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
+  }) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.reportPlayback(
+      address: address,
+      session: session,
+      event: event,
+      itemId: itemId,
+      position: position,
+      volume: volume,
+      paused: paused,
+    );
+  }
+
   ({JellyfinApi api, JellyfinServerAddress address, JellyfinSession session})
   _requireConnection() {
     final api = _api;

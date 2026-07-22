@@ -123,6 +123,17 @@ class RecordingJellyfinApi implements JellyfinApi {
   bool validatedSession = false;
 
   @override
+  Future<void> reportPlayback({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
+  }) async {}
+
+  @override
   JellyfinAudioStreamSource createDirectPlaySource({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -191,6 +202,17 @@ class RecordingJellyfinApi implements JellyfinApi {
 }
 
 class FailingJellyfinApi implements JellyfinApi {
+  @override
+  Future<void> reportPlayback({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
+  }) async {}
+
   @override
   JellyfinAudioStreamSource createDirectPlaySource({
     required JellyfinServerAddress address,

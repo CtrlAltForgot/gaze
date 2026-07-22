@@ -90,6 +90,8 @@ class JellyfinAudioStreamSource {
   final Map<String, String> headers;
 }
 
+enum JellyfinPlaybackEvent { start, progress, stopped }
+
 abstract interface class JellyfinApi {
   Future<JellyfinServerInfo> getPublicServerInfo(JellyfinServerAddress address);
 
@@ -128,6 +130,16 @@ abstract interface class JellyfinApi {
     required JellyfinServerAddress address,
     required JellyfinSession session,
     required String itemId,
+  });
+
+  Future<void> reportPlayback({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required JellyfinPlaybackEvent event,
+    required String itemId,
+    required Duration position,
+    required double volume,
+    required bool paused,
   });
 
   void close();

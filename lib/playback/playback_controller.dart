@@ -6,6 +6,7 @@ class RemotePlaybackSource {
     required this.uri,
     required this.title,
     required this.artist,
+    this.itemId,
     this.headers = const {},
     this.artworkBytes,
   });
@@ -14,6 +15,7 @@ class RemotePlaybackSource {
   final Map<String, String> headers;
   final String title;
   final String artist;
+  final String? itemId;
   final Uint8List? artworkBytes;
 }
 
@@ -41,6 +43,7 @@ class PlaybackSnapshot {
     this.title,
     this.artist,
     this.artworkBytes,
+    this.itemId,
   });
 
   final PlaybackStatus status;
@@ -53,6 +56,7 @@ class PlaybackSnapshot {
   final String? title;
   final String? artist;
   final Uint8List? artworkBytes;
+  final String? itemId;
 
   PlaybackSnapshot copyWith({
     PlaybackStatus? status,
@@ -66,6 +70,7 @@ class PlaybackSnapshot {
     String? title,
     String? artist,
     Uint8List? artworkBytes,
+    String? itemId,
   }) {
     return PlaybackSnapshot(
       status: status ?? this.status,
@@ -78,6 +83,7 @@ class PlaybackSnapshot {
       title: title ?? this.title,
       artist: artist ?? this.artist,
       artworkBytes: artworkBytes ?? this.artworkBytes,
+      itemId: itemId ?? this.itemId,
     );
   }
 }
