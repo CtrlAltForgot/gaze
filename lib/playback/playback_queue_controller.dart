@@ -1,0 +1,99 @@
+import 'dart:async';
+
+import 'playback_controller.dart';
+
+class PlaybackQueueState {
+  const PlaybackQueueState({this.items = const [], this.currentIndex = -1});
+
+  final List<RemotePlaybackSource> items;
+  final int currentIndex;
+
+  bool get hasPrevious => currentIndex > 0;
+  bool get hasNext => currentIndex >= 0 && currentIndex + 1 < items.length;
+}
+
+class PlaybackQueueController {
+  PlaybackQueueController({required PlaybackController playbackController})
+    : _playbackController = playbackController {
+    _playbackSubscription = playbackController.states.listen((playback) {
+      if (playback.completed && !_completionHandled) {
+        _completionHandled = true;
+        unawaited(next());
+      } else if (!playback.completed) {
+        _completionHandled = false;
+      }
+    });
+  }
+
+  final PlaybackController _playbackController;
+  final StreamController<PlaybackQueueState> _states =
+      StreamController<PlaybackQueueState>.broadcast();
+  late final StreamSubscription<PlaybackSnapshot> _playbackSubscription;
+  PlaybackQueueState _state = const PlaybackQueueState();
+  bool _completionHandled = false;
+
+  PlaybackQueueState get state => _state;
+  Stream<PlaybackQueueState> get states => _states.stream;
+
+  Future<void> playAlbum(
+    List<RemotePlaybackSource> items, {
+    required int startIndex,
+  }) async {
+    if (items.isEmpty || startIndex < 0 || startIndex >= items.length) {
+      return;
+    }
+    _emit(
+      PlaybackQueueState(
+        items: List.unmodifiable(items),
+        currentIndex: startIndex,
+      ),
+    );
+    await _openCurrent();
+  }
+
+  Future<void> previous() async {
+    if (!_state.hasPrevious) {
+      return;
+    }
+    _emit(
+      PlaybackQueueState(
+        items: _state.items,
+        currentIndex: _state.currentIndex - 1,
+      ),
+    );
+    await _openCurrent();
+  }
+
+  Future<void> next() async {
+    if (!_state.hasNext) {
+      return;
+    }
+    _emit(
+      PlaybackQueueState(
+        items: _state.items,
+        currentIndex: _state.currentIndex + 1,
+      ),
+    );
+    await _openCurrent();
+  }
+
+  Future<void> _openCurrent() async {
+    _completionHandled = false;
+    await _playbackController.loadRemoteSource(
+      _state.items[_state.currentIndex],
+    );
+    await _playbackController.play();
+  }
+
+  void _emit(PlaybackQueueState state) {
+    _state = state;
+    if (!_states.isClosed) {
+      _states.add(state);
+    }
+  }
+
+  Future<void> dispose() async {
+    await _playbackSubscription.cancel();
+    await _states.close();
+  }
+}

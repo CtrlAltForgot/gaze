@@ -19,7 +19,8 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete:** the first read-only Jellyfin music-library slice displays real recently added albums and authenticated artwork on Home and received manual visual approval on Linux.
 - **Complete on Linux:** saved-session restoration validates the stored token and automatically reloads Home after restart; the user manually verified the restart sequence.
 - **Complete on Linux:** Albums navigation, server-side sorting, automatic bounded pagination, and read-only album track listings passed real-library visual and interaction review. Login persistence was hardened after real keyring feedback, and the non-secret server/username profile remains available for reconnection.
-- **Active:** generate authenticated Jellyfin audio sources, connect track selection to the verified playback boundary, and replace the nonfunctional player placeholder with current-track controls.
+- **Complete on Linux:** authenticated direct play, track selection, the functional player bar, fast hover/focus play actions, and a temporary album queue with previous, next, and completion advancement passed manual playback and visual review.
+- **Active:** add Jellyfin playback start, progress, pause, and stop reporting without coupling server calls to widgets or the media engine.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -119,6 +120,8 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 ## Phase 5 — playback adapter and basic player
 
 **Goal:** integrate the backend selected by the early spike behind a maintainable playback boundary.
+
+**Current status:** manually verified on Linux. gaze generates a static Jellyfin audio stream URL while keeping the access token exclusively in the authorization header. media-kit accepts the URL and headers through the engine-neutral playback source. Album track rows start playback, and the persistent bar exposes play/pause, seek, volume, position, duration, current metadata, artwork, and visible errors. A temporary album queue enables previous, next, and completion advancement without persistence. The next focused slice is Jellyfin playback reporting. Durable queue editing and fallback transcoding remain later work.
 
 - Generate authenticated Jellyfin direct-play and transcoded URLs inside the Jellyfin adapter without persisting credentials or private URLs in diagnostics.
 - Reconfirm the selected backend against those real Jellyfin sources; generic public remote-URL testing is not required.

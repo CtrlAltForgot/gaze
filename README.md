@@ -2,7 +2,7 @@
 
 gaze is a desktop-first music client targeting Linux, Windows, and macOS. Linux on Nobara is the active development and testing platform. gaze will connect to a Jellyfin music library hosted on an Unraid server. The product name is always displayed in lowercase.
 
-The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin connection flow are established. Authentication, saved-session restoration, recently added albums, and automatically paginated Albums browsing with read-only track listings have been manually verified against the intended Jellyfin server on Linux. The active slice connects those tracks to real authenticated Jellyfin playback. Persistent bounded caching for artwork, metadata, and future lyrics remains a dedicated storage phase rather than an unbounded early cache. Windows and macOS runner files are generated but have not been built or run on those operating systems.
+The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin connection flow are established. Authentication, session restoration, Albums browsing, authenticated direct playback, the functional player bar, and temporary album queue have been manually verified against the intended Jellyfin server on Linux. The active slice adds Jellyfin playback reporting before broader library pages. Persistent bounded caching for artwork, metadata, and future lyrics remains a dedicated storage phase rather than an unbounded early cache. Windows and macOS runner files are generated but have not been built or run on those operating systems.
 
 ## Verified development status
 

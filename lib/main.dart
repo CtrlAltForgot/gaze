@@ -14,6 +14,7 @@ import 'jellyfin/jellyfin_connection_screen.dart';
 import 'playback/media_kit_playback_controller.dart';
 import 'playback/playback_controller.dart';
 import 'playback/playback_test_screen.dart';
+import 'playback/playback_queue_controller.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,9 +54,13 @@ enum _DevelopmentScreen { shell, jellyfinConnection, playbackTest }
 
 class _GazeAppState extends State<GazeApp> {
   _DevelopmentScreen _screen = _DevelopmentScreen.shell;
+  late final PlaybackQueueController _queueController = PlaybackQueueController(
+    playbackController: widget.playbackController,
+  );
 
   @override
   void dispose() {
+    unawaited(_queueController.dispose());
     unawaited(widget.playbackController.dispose());
     unawaited(widget.connectionController.dispose());
     super.dispose();
@@ -78,6 +83,8 @@ class _GazeAppState extends State<GazeApp> {
         ),
         _DevelopmentScreen.shell => DesktopShell(
           connectionController: widget.connectionController,
+          playbackController: widget.playbackController,
+          queueController: _queueController,
           onOpenJellyfinConnection: () =>
               setState(() => _screen = _DevelopmentScreen.jellyfinConnection),
           onOpenPlaybackTest: () =>

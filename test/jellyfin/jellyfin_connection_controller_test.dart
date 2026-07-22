@@ -123,6 +123,16 @@ class RecordingJellyfinApi implements JellyfinApi {
   bool validatedSession = false;
 
   @override
+  JellyfinAudioStreamSource createDirectPlaySource({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+  }) => JellyfinAudioStreamSource(
+    uri: address.endpoint('/Audio/$itemId/stream'),
+    headers: const {'Authorization': 'test-auth-header'},
+  );
+
+  @override
   Future<AlbumPage> getAlbums({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -181,6 +191,16 @@ class RecordingJellyfinApi implements JellyfinApi {
 }
 
 class FailingJellyfinApi implements JellyfinApi {
+  @override
+  JellyfinAudioStreamSource createDirectPlaySource({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+  }) => JellyfinAudioStreamSource(
+    uri: address.endpoint('/Audio/$itemId/stream'),
+    headers: const {},
+  );
+
   @override
   Future<AlbumPage> getAlbums({
     required JellyfinServerAddress address,

@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
+import '../library/track_summary.dart';
+import '../playback/playback_controller.dart';
+import '../playback/playback_queue_controller.dart';
 import 'albums_page.dart';
 
 enum _LibraryDestination { home, albums }
@@ -12,12 +15,16 @@ enum _LibraryDestination { home, albums }
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
     required this.connectionController,
+    required this.playbackController,
+    required this.queueController,
     required this.onOpenJellyfinConnection,
     required this.onOpenPlaybackTest,
     super.key,
   });
 
   final JellyfinConnectionController connectionController;
+  final PlaybackController playbackController;
+  final PlaybackQueueController queueController;
   final VoidCallback onOpenJellyfinConnection;
   final VoidCallback onOpenPlaybackTest;
 
@@ -89,6 +96,27 @@ class _DesktopShellState extends State<DesktopShell> {
     }
   }
 
+  Future<void> _playAlbum(
+    AlbumSummary album,
+    List<TrackSummary> tracks,
+    int startIndex,
+  ) {
+    final sources = tracks
+        .map((track) {
+          final jellyfinSource = widget.connectionController
+              .createDirectPlaySource(track.id);
+          return RemotePlaybackSource(
+            uri: jellyfinSource.uri,
+            headers: jellyfinSource.headers,
+            title: track.title,
+            artist: track.artist,
+            artworkBytes: album.artworkBytes,
+          );
+        })
+        .toList(growable: false);
+    return widget.queueController.playAlbum(sources, startIndex: startIndex);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,13 +151,17 @@ class _DesktopShellState extends State<DesktopShell> {
                         _LibraryDestination.albums => AlbumsPage(
                           connectionController: widget.connectionController,
                           onConnect: widget.onOpenJellyfinConnection,
+                          onPlayTrack: _playAlbum,
                         ),
                       },
                     ),
                   ],
                 ),
               ),
-              const _PlayerPlaceholder(),
+              _PlayerBar(
+                controller: widget.playbackController,
+                queueController: widget.queueController,
+              ),
             ],
           );
         },
@@ -537,89 +569,176 @@ class _AlbumCard extends StatelessWidget {
   }
 }
 
-class _PlayerPlaceholder extends StatelessWidget {
-  const _PlayerPlaceholder();
+class _PlayerBar extends StatelessWidget {
+  const _PlayerBar({required this.controller, required this.queueController});
+
+  final PlaybackController controller;
+  final PlaybackQueueController queueController;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 92,
-      padding: const EdgeInsets.symmetric(horizontal: GazeSpacing.large),
-      decoration: const BoxDecoration(
-        color: GazeColors.navigation,
-        border: Border(top: BorderSide(color: GazeColors.outline)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: GazeColors.surfaceRaised,
-              borderRadius: BorderRadius.circular(GazeRadii.control),
-            ),
-            child: const Icon(
-              Icons.music_note_rounded,
-              color: GazeColors.textSecondary,
-            ),
+    return StreamBuilder<PlaybackSnapshot>(
+      stream: controller.states,
+      initialData: controller.state,
+      builder: (context, snapshot) {
+        final playback = snapshot.data ?? controller.state;
+        final queue = queueController.state;
+        final hasTrack = playback.title != null;
+        final playing =
+            playback.status == PlaybackStatus.playing ||
+            playback.status == PlaybackStatus.buffering;
+        final durationMs = playback.duration.inMilliseconds;
+        final positionMs = playback.position.inMilliseconds.clamp(
+          0,
+          durationMs > 0 ? durationMs : 1,
+        );
+        return Container(
+          height: 104,
+          padding: const EdgeInsets.symmetric(horizontal: GazeSpacing.large),
+          decoration: const BoxDecoration(
+            color: GazeColors.navigation,
+            border: Border(top: BorderSide(color: GazeColors.outline)),
           ),
-          const SizedBox(width: GazeSpacing.medium),
-          const Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Nothing playing',
-                  style: TextStyle(
-                    color: GazeColors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                  ),
+          child: Row(
+            children: [
+              _PlayerArtwork(playback: playback),
+              const SizedBox(width: GazeSpacing.medium),
+              SizedBox(
+                width: 220,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      playback.title ?? 'Nothing playing',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: GazeColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: GazeSpacing.xSmall),
+                    Text(
+                      playback.errorMessage != null
+                          ? playback.errorMessage!
+                          : playback.artist?.isNotEmpty == true
+                          ? playback.artist!
+                          : 'Choose a track from an album.',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                SizedBox(height: GazeSpacing.xSmall),
-                Text('Choose something when your library is connected.'),
-              ],
-            ),
+              ),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          onPressed: queue.hasPrevious
+                              ? queueController.previous
+                              : null,
+                          tooltip: 'Previous',
+                          iconSize: 30,
+                          icon: const Icon(Icons.skip_previous_rounded),
+                        ),
+                        IconButton.filled(
+                          onPressed: hasTrack
+                              ? playing
+                                    ? controller.pause
+                                    : controller.play
+                              : null,
+                          tooltip: playing ? 'Pause' : 'Play',
+                          icon: Icon(
+                            playing
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: queue.hasNext
+                              ? queueController.next
+                              : null,
+                          tooltip: 'Next',
+                          iconSize: 30,
+                          icon: const Icon(Icons.skip_next_rounded),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Text(_compactDuration(playback.position)),
+                        Expanded(
+                          child: Slider(
+                            value: positionMs.toDouble(),
+                            max: durationMs > 0 ? durationMs.toDouble() : 1,
+                            onChanged: hasTrack && durationMs > 0
+                                ? (value) => controller.seek(
+                                    Duration(milliseconds: value.round()),
+                                  )
+                                : null,
+                          ),
+                        ),
+                        Text(_compactDuration(playback.duration)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 150,
+                child: Row(
+                  children: [
+                    const Icon(Icons.volume_up_rounded, size: 20),
+                    Expanded(
+                      child: Slider(
+                        value: playback.volume.clamp(0, 1),
+                        onChanged: controller.setVolume,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const _DisabledPlayerControl(
-            icon: Icons.skip_previous_rounded,
-            label: 'Previous',
-          ),
-          const _DisabledPlayerControl(
-            icon: Icons.play_arrow_rounded,
-            label: 'Play',
-            prominent: true,
-          ),
-          const _DisabledPlayerControl(
-            icon: Icons.skip_next_rounded,
-            label: 'Next',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class _DisabledPlayerControl extends StatelessWidget {
-  const _DisabledPlayerControl({
-    required this.icon,
-    required this.label,
-    this.prominent = false,
-  });
+class _PlayerArtwork extends StatelessWidget {
+  const _PlayerArtwork({required this.playback});
 
-  final IconData icon;
-  final String label;
-  final bool prominent;
-
+  final PlaybackSnapshot playback;
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: null,
-      tooltip: label,
-      iconSize: prominent ? 30 : 24,
-      icon: Icon(icon),
+    return Container(
+      width: 58,
+      height: 58,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: GazeColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(GazeRadii.control),
+      ),
+      child: playback.artworkBytes == null
+          ? const Icon(
+              Icons.music_note_rounded,
+              color: GazeColors.textSecondary,
+            )
+          : Image.memory(playback.artworkBytes!, fit: BoxFit.cover),
     );
   }
+}
+
+String _compactDuration(Duration duration) {
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return '$minutes:$seconds';
 }
 
 class _LibraryMessage extends StatelessWidget {

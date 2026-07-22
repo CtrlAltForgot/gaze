@@ -41,6 +41,28 @@ void main() {
   });
 
   group('HttpJellyfinApi', () {
+    test('creates a direct-play source with header authentication', () {
+      final api = _createApi(MockClient((_) async => http.Response('', 200)));
+
+      final source = api.createDirectPlaySource(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        itemId: 'track-id',
+      );
+
+      expect(
+        source.uri.toString(),
+        'https://music.example/Audio/track-id/stream?static=true',
+      );
+      expect(source.uri.toString(), isNot(contains('private-access-token')));
+      expect(source.headers['Authorization'], contains('private-access-token'));
+      api.close();
+    });
+
     test('reads public Jellyfin server information over HTTP', () async {
       final client = MockClient((request) async {
         expect(request.method, 'GET');

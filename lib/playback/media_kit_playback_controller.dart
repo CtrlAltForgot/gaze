@@ -81,7 +81,35 @@ class MediaKitPlaybackController implements PlaybackController {
       return;
     }
 
-    await _load(url.toString(), url.toString());
+    await loadRemoteSource(
+      RemotePlaybackSource(uri: url, title: url.toString(), artist: ''),
+    );
+  }
+
+  @override
+  Future<void> loadRemoteSource(RemotePlaybackSource source) async {
+    final url = source.uri;
+    if (!url.hasAuthority || (url.scheme != 'http' && url.scheme != 'https')) {
+      _reportError('The remote audio source is not a valid HTTP or HTTPS URL.');
+      return;
+    }
+    _emit(
+      PlaybackSnapshot(
+        status: PlaybackStatus.loading,
+        volume: _state.volume,
+        sourceLabel: source.title,
+        title: source.title,
+        artist: source.artist,
+        artworkBytes: source.artworkBytes,
+      ),
+    );
+    await _run(() async {
+      await _player.open(
+        Media(url.toString(), httpHeaders: source.headers),
+        play: false,
+      );
+      _emit(_state.copyWith(status: PlaybackStatus.ready, clearError: true));
+    });
   }
 
   Future<void> _load(String source, String label) async {

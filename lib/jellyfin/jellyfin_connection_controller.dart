@@ -223,6 +223,15 @@ class JellyfinConnectionController {
     );
   }
 
+  JellyfinAudioStreamSource createDirectPlaySource(String trackId) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.createDirectPlaySource(
+      address: address,
+      session: session,
+      itemId: trackId,
+    );
+  }
+
   ({JellyfinApi api, JellyfinServerAddress address, JellyfinSession session})
   _requireConnection() {
     final api = _api;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -127,6 +128,7 @@ void main() {
 
   testWidgets('browses albums and opens a track listing', (tester) async {
     final connectionController = createFakeConnectionController();
+    final playbackController = FakePlaybackController();
     await connectionController.connect(
       serverAddress: 'http://music.local:8096',
       userName: 'listener',
@@ -134,7 +136,7 @@ void main() {
     );
     await tester.pumpWidget(
       GazeApp(
-        playbackController: FakePlaybackController(),
+        playbackController: playbackController,
         connectionController: connectionController,
       ),
     );
@@ -154,6 +156,23 @@ void main() {
     expect(find.text('All albums'), findsOneWidget);
     expect(find.text('Real Track'), findsOneWidget);
     expect(find.text('3:12'), findsOneWidget);
+    expect(find.byKey(const ValueKey('play')), findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(find.text('Real Track')));
+    await tester.pump(const Duration(milliseconds: 70));
+    expect(find.byKey(const ValueKey('play')), findsOneWidget);
+
+    await tester.tap(find.text('Real Track'));
+    await tester.pumpAndSettle();
+
+    expect(playbackController.loadedRemoteSource?.title, 'Real Track');
+    expect(
+      playbackController.loadedRemoteSource?.headers['Authorization'],
+      'test-auth-header',
+    );
+    expect(find.text('Real Track'), findsWidgets);
   });
 }
 
@@ -171,6 +190,7 @@ class FakePlaybackController implements PlaybackController {
       StreamController<PlaybackSnapshot>.broadcast();
   PlaybackSnapshot _state = const PlaybackSnapshot();
   Uri? loadedRemoteUrl;
+  RemotePlaybackSource? loadedRemoteSource;
 
   @override
   PlaybackSnapshot get state => _state;
@@ -187,6 +207,20 @@ class FakePlaybackController implements PlaybackController {
     _state = _state.copyWith(
       status: PlaybackStatus.ready,
       sourceLabel: url.toString(),
+    );
+    _states.add(_state);
+  }
+
+  @override
+  Future<void> loadRemoteSource(RemotePlaybackSource source) async {
+    loadedRemoteSource = source;
+    loadedRemoteUrl = source.uri;
+    _state = PlaybackSnapshot(
+      status: PlaybackStatus.ready,
+      sourceLabel: source.title,
+      title: source.title,
+      artist: source.artist,
+      artworkBytes: source.artworkBytes,
     );
     _states.add(_state);
   }
@@ -243,6 +277,16 @@ class FakeJellyfinApi implements JellyfinApi {
     title: 'Real Album',
     artist: 'Real Artist',
     year: 2026,
+  );
+
+  @override
+  JellyfinAudioStreamSource createDirectPlaySource({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+  }) => JellyfinAudioStreamSource(
+    uri: address.endpoint('/Audio/$itemId/stream'),
+    headers: const {'Authorization': 'test-auth-header'},
   );
 
   @override

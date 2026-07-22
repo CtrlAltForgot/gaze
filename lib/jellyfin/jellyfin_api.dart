@@ -83,6 +83,13 @@ class JellyfinSession {
   final String userName;
 }
 
+class JellyfinAudioStreamSource {
+  const JellyfinAudioStreamSource({required this.uri, required this.headers});
+
+  final Uri uri;
+  final Map<String, String> headers;
+}
+
 abstract interface class JellyfinApi {
   Future<JellyfinServerInfo> getPublicServerInfo(JellyfinServerAddress address);
 
@@ -115,6 +122,12 @@ abstract interface class JellyfinApi {
   Future<void> validateSession({
     required JellyfinServerAddress address,
     required JellyfinSession session,
+  });
+
+  JellyfinAudioStreamSource createDirectPlaySource({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
   });
 
   void close();

@@ -1,4 +1,21 @@
 import 'dart:async';
+import 'dart:typed_data';
+
+class RemotePlaybackSource {
+  const RemotePlaybackSource({
+    required this.uri,
+    required this.title,
+    required this.artist,
+    this.headers = const {},
+    this.artworkBytes,
+  });
+
+  final Uri uri;
+  final Map<String, String> headers;
+  final String title;
+  final String artist;
+  final Uint8List? artworkBytes;
+}
 
 enum PlaybackStatus {
   idle,
@@ -21,6 +38,9 @@ class PlaybackSnapshot {
     this.sourceLabel,
     this.completed = false,
     this.errorMessage,
+    this.title,
+    this.artist,
+    this.artworkBytes,
   });
 
   final PlaybackStatus status;
@@ -30,6 +50,9 @@ class PlaybackSnapshot {
   final String? sourceLabel;
   final bool completed;
   final String? errorMessage;
+  final String? title;
+  final String? artist;
+  final Uint8List? artworkBytes;
 
   PlaybackSnapshot copyWith({
     PlaybackStatus? status,
@@ -40,6 +63,9 @@ class PlaybackSnapshot {
     bool? completed,
     String? errorMessage,
     bool clearError = false,
+    String? title,
+    String? artist,
+    Uint8List? artworkBytes,
   }) {
     return PlaybackSnapshot(
       status: status ?? this.status,
@@ -49,6 +75,9 @@ class PlaybackSnapshot {
       sourceLabel: sourceLabel ?? this.sourceLabel,
       completed: completed ?? this.completed,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      title: title ?? this.title,
+      artist: artist ?? this.artist,
+      artworkBytes: artworkBytes ?? this.artworkBytes,
     );
   }
 }
@@ -61,6 +90,8 @@ abstract interface class PlaybackController {
   Future<void> loadLocalFile(String path);
 
   Future<void> loadRemoteUrl(Uri url);
+
+  Future<void> loadRemoteSource(RemotePlaybackSource source);
 
   Future<void> play();
 

@@ -9,11 +9,18 @@ class AlbumsPage extends StatefulWidget {
   const AlbumsPage({
     required this.connectionController,
     required this.onConnect,
+    required this.onPlayTrack,
     super.key,
   });
 
   final JellyfinConnectionController connectionController;
   final VoidCallback onConnect;
+  final Future<void> Function(
+    AlbumSummary album,
+    List<TrackSummary> tracks,
+    int startIndex,
+  )
+  onPlayTrack;
 
   @override
   State<AlbumsPage> createState() => _AlbumsPageState();
@@ -147,6 +154,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
       return _AlbumDetail(
         album: album,
         connectionController: widget.connectionController,
+        onPlayTrack: (tracks, index) =>
+            widget.onPlayTrack(album, tracks, index),
         onBack: () => setState(() => _selectedAlbum = null),
       );
     }
@@ -333,11 +342,13 @@ class _AlbumDetail extends StatefulWidget {
     required this.album,
     required this.connectionController,
     required this.onBack,
+    required this.onPlayTrack,
   });
 
   final AlbumSummary album;
   final JellyfinConnectionController connectionController;
   final VoidCallback onBack;
+  final Future<void> Function(List<TrackSummary> tracks, int index) onPlayTrack;
 
   @override
   State<_AlbumDetail> createState() => _AlbumDetailState();
@@ -453,19 +464,65 @@ class _AlbumDetailState extends State<_AlbumDetail> {
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final track = _tracks![index];
-                return ListTile(
-                  leading: SizedBox(
-                    width: 32,
-                    child: Text('${track.trackNumber ?? index + 1}'),
-                  ),
-                  title: Text(track.title),
-                  subtitle: Text(track.artist),
-                  trailing: Text(_durationLabel(track.duration)),
+                return _TrackRow(
+                  track: track,
+                  displayNumber: track.trackNumber ?? index + 1,
+                  onPlay: () => widget.onPlayTrack(_tracks!, index),
                 );
               },
             ),
           ),
       ],
+    );
+  }
+}
+
+class _TrackRow extends StatefulWidget {
+  const _TrackRow({
+    required this.track,
+    required this.displayNumber,
+    required this.onPlay,
+  });
+
+  final TrackSummary track;
+  final int displayNumber;
+  final VoidCallback onPlay;
+
+  @override
+  State<_TrackRow> createState() => _TrackRowState();
+}
+
+class _TrackRowState extends State<_TrackRow> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final showPlay = _hovered || _focused;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        onFocusChange: (value) => setState(() => _focused = value),
+        child: ListTile(
+          onTap: widget.onPlay,
+          leading: SizedBox(
+            width: 32,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 60),
+              child: showPlay
+                  ? const Icon(Icons.play_arrow_rounded, key: ValueKey('play'))
+                  : Text(
+                      '${widget.displayNumber}',
+                      key: const ValueKey('number'),
+                    ),
+            ),
+          ),
+          title: Text(widget.track.title),
+          subtitle: Text(widget.track.artist),
+          trailing: Text(_durationLabel(widget.track.duration)),
+        ),
+      ),
     );
   }
 }

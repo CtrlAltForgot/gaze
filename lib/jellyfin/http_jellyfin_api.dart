@@ -23,6 +23,25 @@ class HttpJellyfinApi implements JellyfinApi {
   final Duration requestTimeout;
 
   @override
+  JellyfinAudioStreamSource createDirectPlaySource({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+  }) {
+    if (itemId.isEmpty || itemId.contains('/')) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an invalid track identifier.',
+      );
+    }
+    return JellyfinAudioStreamSource(
+      uri: address
+          .endpoint('/Audio/$itemId/stream')
+          .replace(queryParameters: const {'static': 'true'}),
+      headers: _authenticatedHeaders(session),
+    );
+  }
+
+  @override
   Future<JellyfinServerInfo> getPublicServerInfo(
     JellyfinServerAddress address,
   ) async {
