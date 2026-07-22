@@ -1,10 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 
 import 'design/gaze_theme.dart';
 import 'desktop/desktop_shell.dart';
+import 'jellyfin/flutter_secure_jellyfin_credential_store.dart';
+import 'jellyfin/http_jellyfin_api.dart';
+import 'jellyfin/jellyfin_api.dart';
+import 'jellyfin/jellyfin_connection_controller.dart';
+import 'jellyfin/jellyfin_connection_screen.dart';
 import 'playback/media_kit_playback_controller.dart';
 import 'playback/playback_controller.dart';
 import 'playback/playback_test_screen.dart';
@@ -12,24 +18,45 @@ import 'playback/playback_test_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  runApp(GazeApp(controller: MediaKitPlaybackController()));
+  final credentialStore = const FlutterSecureJellyfinCredentialStore();
+  final connectionController = JellyfinConnectionController(
+    credentialStore: credentialStore,
+    apiFactory: (deviceId) => HttpJellyfinApi(
+      client: http.Client(),
+      identity: JellyfinClientIdentity(deviceId: deviceId),
+    ),
+  );
+  runApp(
+    GazeApp(
+      playbackController: MediaKitPlaybackController(),
+      connectionController: connectionController,
+    ),
+  );
 }
 
 class GazeApp extends StatefulWidget {
-  const GazeApp({required this.controller, super.key});
+  const GazeApp({
+    required this.playbackController,
+    required this.connectionController,
+    super.key,
+  });
 
-  final PlaybackController controller;
+  final PlaybackController playbackController;
+  final JellyfinConnectionController connectionController;
 
   @override
   State<GazeApp> createState() => _GazeAppState();
 }
 
+enum _DevelopmentScreen { shell, jellyfinConnection, playbackTest }
+
 class _GazeAppState extends State<GazeApp> {
-  bool _showPlaybackTest = false;
+  _DevelopmentScreen _screen = _DevelopmentScreen.shell;
 
   @override
   void dispose() {
-    unawaited(widget.controller.dispose());
+    unawaited(widget.playbackController.dispose());
+    unawaited(widget.connectionController.dispose());
     super.dispose();
   }
 
@@ -39,15 +66,22 @@ class _GazeAppState extends State<GazeApp> {
       title: 'gaze',
       debugShowCheckedModeBanner: false,
       theme: buildGazeTheme(),
-      home: _showPlaybackTest
-          ? PlaybackTestScreen(
-              controller: widget.controller,
-              onClose: () => setState(() => _showPlaybackTest = false),
-            )
-          : DesktopShell(
-              onOpenPlaybackTest: () =>
-                  setState(() => _showPlaybackTest = true),
-            ),
+      home: switch (_screen) {
+        _DevelopmentScreen.jellyfinConnection => JellyfinConnectionScreen(
+          controller: widget.connectionController,
+          onClose: () => setState(() => _screen = _DevelopmentScreen.shell),
+        ),
+        _DevelopmentScreen.playbackTest => PlaybackTestScreen(
+          controller: widget.playbackController,
+          onClose: () => setState(() => _screen = _DevelopmentScreen.shell),
+        ),
+        _DevelopmentScreen.shell => DesktopShell(
+          onOpenJellyfinConnection: () =>
+              setState(() => _screen = _DevelopmentScreen.jellyfinConnection),
+          onOpenPlaybackTest: () =>
+              setState(() => _screen = _DevelopmentScreen.playbackTest),
+        ),
+      },
     );
   }
 }

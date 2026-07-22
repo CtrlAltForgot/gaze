@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gaze/jellyfin/jellyfin_api.dart';
+import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
+import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/main.dart';
 import 'package:gaze/playback/playback_controller.dart';
 
@@ -9,7 +12,12 @@ void main() {
   testWidgets('shows the desktop shell by default', (tester) async {
     final controller = FakePlaybackController();
 
-    await tester.pumpWidget(GazeApp(controller: controller));
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: controller,
+        connectionController: createFakeConnectionController(),
+      ),
+    );
 
     expect(find.text('g'), findsOneWidget);
     expect(find.text('Your music, brought forward.'), findsOneWidget);
@@ -21,7 +29,12 @@ void main() {
   testWidgets('keeps the playback technical test reachable', (tester) async {
     final controller = FakePlaybackController();
 
-    await tester.pumpWidget(GazeApp(controller: controller));
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: controller,
+        connectionController: createFakeConnectionController(),
+      ),
+    );
     await tester.tap(find.byTooltip('Open the playback technical test'));
     await tester.pumpAndSettle();
 
@@ -46,6 +59,55 @@ void main() {
     expect(controller.loadedRemoteUrl.toString(), endsWith('audio.flac'));
     expect(find.textContaining('Source: https://example.com'), findsOneWidget);
   });
+
+  testWidgets('connects through the temporary Jellyfin screen', (tester) async {
+    final credentials = FakeCredentialStore();
+    final connectionController = createFakeConnectionController(credentials);
+
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: FakePlaybackController(),
+        connectionController: connectionController,
+      ),
+    );
+    await tester.tap(find.byTooltip('Connect to Jellyfin'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connect Jellyfin'), findsOneWidget);
+    expect(find.text('Bring your library into gaze'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Jellyfin server address'),
+      'http://music.local:8096',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Username'),
+      'listener',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Password'),
+      'not-a-real-password',
+    );
+    await tester.pump();
+
+    expect(find.textContaining('HTTP is unencrypted'), findsOneWidget);
+    final connectButton = find.widgetWithText(FilledButton, 'Connect');
+    await tester.ensureVisible(connectButton);
+    await tester.tap(connectButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connected to Music Server'), findsOneWidget);
+    expect(credentials.accessToken, 'test-access-token');
+  });
+}
+
+JellyfinConnectionController createFakeConnectionController([
+  FakeCredentialStore? credentials,
+]) {
+  return JellyfinConnectionController(
+    credentialStore: credentials ?? FakeCredentialStore(),
+    apiFactory: (_) => FakeJellyfinApi(),
+  );
 }
 
 class FakePlaybackController implements PlaybackController {
@@ -90,4 +152,49 @@ class FakePlaybackController implements PlaybackController {
 
   @override
   Future<void> dispose() => _states.close();
+}
+
+class FakeCredentialStore implements JellyfinCredentialStore {
+  String? accessToken;
+
+  @override
+  Future<void> deleteAccessToken() async => accessToken = null;
+
+  @override
+  Future<String> getOrCreateDeviceId() async => 'test-device-id';
+
+  @override
+  Future<String?> readAccessToken() async => accessToken;
+
+  @override
+  Future<void> writeAccessToken(String token) async => accessToken = token;
+}
+
+class FakeJellyfinApi implements JellyfinApi {
+  @override
+  Future<JellyfinSession> authenticate({
+    required JellyfinServerAddress address,
+    required String userName,
+    required String password,
+  }) async {
+    return JellyfinSession(
+      accessToken: 'test-access-token',
+      userId: 'test-user-id',
+      userName: userName,
+    );
+  }
+
+  @override
+  void close() {}
+
+  @override
+  Future<JellyfinServerInfo> getPublicServerInfo(
+    JellyfinServerAddress address,
+  ) async {
+    return const JellyfinServerInfo(
+      id: 'test-server-id',
+      name: 'Music Server',
+      version: '10.11.0',
+    );
+  }
 }

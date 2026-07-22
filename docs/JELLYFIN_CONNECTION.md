@@ -2,7 +2,7 @@
 
 ## Status
 
-Transport foundation complete; real-server connection pending. This increment establishes server-address validation, public server discovery, username/password authentication, response parsing, and testable HTTP boundaries. It does not add a visible connection screen or persist a token yet.
+Transport and temporary connection flow implemented and manually verified against the intended Jellyfin server on Linux. The flow validates the server address, discovers public server information, authenticates with username and password, stores only the returned access token and installation device ID in the operating system credential store, and exposes safe connection errors. The password is cleared after each attempt and is never persisted.
 
 ## Implemented in this increment
 
@@ -11,8 +11,11 @@ Transport foundation complete; real-server connection pending. This increment es
 - `HttpJellyfinApi` uses an injected `package:http` client, safe timeouts, Jellyfin authorization headers, and response parsing that does not echo private bodies in errors.
 - `JellyfinServerInfo` and `JellyfinSession` keep transport responses out of future widgets.
 - Sanitized tests cover HTTP/HTTPS normalization, rejected unsafe address forms, public server discovery, authentication request shape, safe HTTP errors, and malformed responses.
+- `flutter_secure_storage` keeps the access token and stable installation device ID out of ordinary files and preferences.
+- A temporary, plainly labeled connection screen supports both HTTP and HTTPS, warns when HTTP is selected, and shows the connected server, user, and version.
+- Controller and widget tests cover successful connection, secure-token lifecycle, disconnect, and safe failures without using a real server or credentials.
 
-Verification completed on Linux:
+Connection-flow verification completed on Linux:
 
 - `flutter pub get` — passed
 - `dart format .` — passed
@@ -37,8 +40,9 @@ Verification completed on Linux:
 4. Send Jellyfin's `MediaBrowser` authorization scheme with stable client, device, device-ID, and version values.
 5. Parse the access token and user identity into a gaze session model.
 6. Keep the password only for the duration of the authentication request.
-7. Persist the access token through an operating-system credential-store adapter in the next increment.
-8. Use the authenticated session to request one read-only music slice before expanding the API surface.
+7. Persist the access token and installation device ID through an operating-system credential-store adapter.
+8. Manually validate authentication against the intended server without placing credentials in the repository or terminal.
+9. Use the authenticated session to request one read-only music slice before expanding the API surface.
 
 The Swagger UI hosted by the user's actual Jellyfin server at `/api-docs/swagger/index.html` is the version-specific reference. The Jellyfin server repository documents `/System/Info/Public`, `/Users/AuthenticateByName`, and `/Users/Me`; the generated API also exposes `/Audio/{itemId}/universal` for later authenticated playback.
 
@@ -50,14 +54,13 @@ Use `package:http` 1.6.0, maintained by `dart.dev`. Its default `IOClient` suppo
 
 ### Secure token storage
 
-`flutter_secure_storage` 10.3.1 is the leading choice because its official package metadata supports Linux, Windows, and macOS and maps to platform credential mechanisms. Do not add it yet:
+`flutter_secure_storage` 10.3.1 is used because its official package metadata supports Linux, Windows, and macOS and maps to platform credential mechanisms:
 
-- Linux requires the `libsecret` runtime and `libsecret-devel` build package plus an available Secret Service provider.
-- This Nobara system has `libsecret` but does not currently have `libsecret-devel` or its `libsecret-1` pkg-config metadata.
+- Linux requires the `libsecret` runtime and `libsecret-devel` build package plus an available Secret Service provider. Both packages and `libsecret-1` pkg-config metadata are present on this Nobara development system.
 - Windows requires later validation with the documented Visual Studio C++ ATL components.
 - macOS requires later Keychain entitlement validation.
 
-Adding the plugin and any system package requires a separate approved task. Until then, authentication results may exist only in memory during tests or a development session.
+Windows and macOS storage behavior remains documentation-confirmed but untested until gaze is built and exercised on those operating systems.
 
 ## Security boundaries
 

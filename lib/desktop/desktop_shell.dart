@@ -3,8 +3,13 @@ import 'package:flutter/material.dart';
 import '../design/gaze_theme.dart';
 
 class DesktopShell extends StatelessWidget {
-  const DesktopShell({required this.onOpenPlaybackTest, super.key});
+  const DesktopShell({
+    required this.onOpenJellyfinConnection,
+    required this.onOpenPlaybackTest,
+    super.key,
+  });
 
+  final VoidCallback onOpenJellyfinConnection;
   final VoidCallback onOpenPlaybackTest;
 
   static const _albums = [
@@ -44,6 +49,7 @@ class DesktopShell extends StatelessWidget {
                   children: [
                     _Navigation(
                       compact: compactNavigation,
+                      onOpenJellyfinConnection: onOpenJellyfinConnection,
                       onOpenPlaybackTest: onOpenPlaybackTest,
                     ),
                     const VerticalDivider(width: 1, thickness: 1),
@@ -61,9 +67,14 @@ class DesktopShell extends StatelessWidget {
 }
 
 class _Navigation extends StatelessWidget {
-  const _Navigation({required this.compact, required this.onOpenPlaybackTest});
+  const _Navigation({
+    required this.compact,
+    required this.onOpenJellyfinConnection,
+    required this.onOpenPlaybackTest,
+  });
 
   final bool compact;
+  final VoidCallback onOpenJellyfinConnection;
   final VoidCallback onOpenPlaybackTest;
 
   @override
@@ -120,6 +131,21 @@ class _Navigation extends StatelessWidget {
                 compact: compact,
               ),
               const Spacer(),
+              Tooltip(
+                message: 'Connect to Jellyfin',
+                child: TextButton.icon(
+                  onPressed: onOpenJellyfinConnection,
+                  icon: const Icon(Icons.cloud_outlined),
+                  label: compact
+                      ? const SizedBox.shrink()
+                      : const Text('Connect Jellyfin'),
+                  style: TextButton.styleFrom(
+                    alignment: Alignment.centerLeft,
+                    foregroundColor: GazeColors.textSecondary,
+                    minimumSize: const Size(48, 48),
+                  ),
+                ),
+              ),
               Tooltip(
                 message: 'Open the playback technical test',
                 child: TextButton.icon(

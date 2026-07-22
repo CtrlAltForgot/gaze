@@ -14,8 +14,9 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete:** generated Linux, Windows, and macOS runners; Windows and macOS validation remains pending on their respective operating systems.
 - **Complete:** Linux playback foundation selection and local media controls using media-kit.
 - **Complete for initial direction:** Phase 2's first desktop shell received manual visual approval; deeper UI work is paused until real library data is available.
-- **Active:** a narrow Phase 3/4 vertical slice containing only the platform-neutral connection models, Jellyfin transport, authentication boundary, and tests needed to connect safely.
-- **Next:** secure token persistence and a temporary connection flow, followed by one read-only Jellyfin music-library slice.
+- **Active:** a narrow Phase 3/4 vertical slice containing the platform-neutral connection models, Jellyfin transport, authentication boundary, OS-backed token storage, and a temporary connection screen.
+- **Complete:** secure token persistence and real-server authentication manually verified on Linux.
+- **Next:** add one read-only Jellyfin music-library slice: recently added albums and artwork on Home.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -84,11 +85,11 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** authenticate safely and browse a real Jellyfin music library.
 
-**Current status:** active. The tested transport foundation now accepts `http://` and `https://` addresses, preserves optional Jellyfin base paths, probes public server information, and parses username/password authentication into an in-memory session behind an injectable interface. Plain HTTP is supported for the user's trusted local network and documented as unencrypted. No real address or credential has entered the repository. Next are approved secure token storage and a temporary connection flow, followed by a real-server connection test.
+**Current status:** active. The tested transport foundation accepts `http://` and `https://` addresses, preserves optional Jellyfin base paths, probes public server information, and parses username/password authentication behind an injectable interface. The temporary connection screen never saves the password; it stores the returned access token and stable installation device ID through the operating system credential store. Plain HTTP is supported for the user's trusted local network and documented as unencrypted. No real address or credential has entered the repository. Automated tests pass for the connection boundary, and the user manually verified authentication against the intended Jellyfin server on Linux. The next slice is recently added albums and artwork on Home.
 
 - Confirm the Jellyfin server/API version and connection expectations without recording a private address, username, or token in the repository.
 - Use the maintained `package:http` client behind an injectable transport boundary on Linux, Windows, and macOS.
-- Use `flutter_secure_storage` for access tokens only after its Linux `libsecret-devel` build requirement is approved and available; never store the account password.
+- Use `flutter_secure_storage` for access tokens and the installation device ID. Its Linux `libsecret-devel` build requirement is installed; never store the account password.
 - Implement Jellyfin HTTP transport, authentication, session expiry, pagination, error mapping, and DTO-to-domain mapping behind repository interfaces.
 - Store the access token through an OS credential-store adapter; keep the non-secret server configuration separately.
 - Create sanitized response fixtures containing no personal server, account, or library information.
