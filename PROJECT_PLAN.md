@@ -19,17 +19,18 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 
 **Goal:** prove that Flutter has a practical playback path for Linux, Windows, and macOS before investing in the real interface or player architecture. Execute functional tests on Linux first and do not describe Windows or macOS behavior as tested until it is exercised on those systems.
 
+**Current status:** complete for the desktop playback foundation. `media_kit` initializes successfully on Linux with the installed `mpv-libs` runtime. A user-selected local music file passed manual play, pause, resume, forward/backward seek, volume, and stop checks. Authenticated remote playback is deferred until Jellyfin authentication and stream URL generation are implemented. Gapless behavior, track completion, long-session stability, Windows, and macOS remain future validation tasks.
+
 - Build a minimal, disposable test screen inside the generated application; it is test tooling, not the gaze interface.
 - Compare the most practical maintained Flutter playback options, considering project activity, Linux, Windows, and macOS support, API fit, packaging, licensing, and native runtime requirements.
-- Test a local audio file first, then a normal remote audio URL.
-- Provide a temporary way to test a Jellyfin direct-play URL later without saving the URL, token, headers, or credentials in source code, preferences, logs, or test fixtures.
-- Verify play, pause, seek, volume, track completion, and useful error reporting for each serious candidate.
+- Test a local audio file first. Defer remote testing to authenticated Jellyfin direct-play and transcoded URLs once authentication and stream URL generation exist.
+- Verify play, pause, seek, volume, and stop for the selected backend. Carry track-completion and detailed error-path validation into later playback work.
 - Test consecutive compatible tracks and document whether true or acceptably seamless gapless playback appears feasible; do not claim gapless support from API documentation alone.
 - Record every required native build and runtime dependency for Linux, Windows, and macOS and whether it is bundled. Distinguish documentation research from dependencies actually verified on Nobara.
 - Remove the disposable screen after the decision is documented, or keep it isolated from production code until the real playback adapter is implemented.
 - Do not create the real queue, persistent player bar, Now Playing interface, Jellyfin client, or final playback architecture during this spike.
 
-**Exit check:** a short decision record names the candidates and versions, their stated desktop-platform support, commands and media cases actually tested on Linux, observed behavior, platform-specific native dependencies, gapless findings, errors or limitations, and the recommended backend. The selected candidate has demonstrated the required controls with local and ordinary remote audio on Linux; Jellyfin direct play and Windows/macOS execution may remain clearly documented follow-ups.
+**Exit check:** complete for foundation selection. The decision record names the candidates and versions, stated desktop-platform support, Linux commands and local media behavior actually tested, platform-specific native dependencies, limitations, and the recommended backend. Authenticated Jellyfin streaming, gapless behavior, long-session stability, track completion, and Windows/macOS execution remain clearly documented later checks.
 
 ## Phase 2 — desktop design foundation
 
