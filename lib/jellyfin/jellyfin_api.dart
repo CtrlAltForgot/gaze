@@ -97,6 +97,11 @@ abstract interface class JellyfinApi {
     int limit = 10,
   });
 
+  Future<void> validateSession({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+  });
+
   void close();
 }
 

@@ -48,6 +48,28 @@ void main() {
     await controller.dispose();
   });
 
+  test('restores and validates a saved session', () async {
+    final credentials = MemoryCredentialStore()
+      ..connection = const SavedJellyfinConnection(
+        serverAddress: 'http://music.local:8096',
+        accessToken: 'saved-token',
+        userId: 'test-user-id',
+        userName: 'listener',
+      );
+    final api = RecordingJellyfinApi();
+    final controller = JellyfinConnectionController(
+      credentialStore: credentials,
+      apiFactory: (_) => api,
+    );
+
+    await controller.restore();
+
+    expect(controller.state.isConnected, isTrue);
+    expect(controller.state.session?.accessToken, 'saved-token');
+    expect(api.validatedSession, isTrue);
+    await controller.dispose();
+  });
+
   test('shows safe connection errors without saving a token', () async {
     final credentials = MemoryCredentialStore();
     final controller = JellyfinConnectionController(
@@ -69,23 +91,27 @@ void main() {
 }
 
 class MemoryCredentialStore implements JellyfinCredentialStore {
-  String? accessToken;
+  SavedJellyfinConnection? connection;
+
+  String? get accessToken => connection?.accessToken;
 
   @override
-  Future<void> deleteAccessToken() async => accessToken = null;
+  Future<void> deleteConnection() async => connection = null;
 
   @override
   Future<String> getOrCreateDeviceId() async => 'stable-device-id';
 
   @override
-  Future<String?> readAccessToken() async => accessToken;
+  Future<SavedJellyfinConnection?> readConnection() async => connection;
 
   @override
-  Future<void> writeAccessToken(String token) async => accessToken = token;
+  Future<void> writeConnection(SavedJellyfinConnection value) async =>
+      connection = value;
 }
 
 class RecordingJellyfinApi implements JellyfinApi {
   String? receivedPassword;
+  bool validatedSession = false;
 
   @override
   Future<List<AlbumSummary>> getRecentlyAddedAlbums({
@@ -121,6 +147,12 @@ class RecordingJellyfinApi implements JellyfinApi {
       version: '10.11.0',
     );
   }
+
+  @override
+  Future<void> validateSession({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+  }) async => validatedSession = true;
 }
 
 class FailingJellyfinApi implements JellyfinApi {
@@ -149,4 +181,10 @@ class FailingJellyfinApi implements JellyfinApi {
   ) {
     throw const JellyfinConnectionException('Could not reach the test server.');
   }
+
+  @override
+  Future<void> validateSession({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+  }) async {}
 }

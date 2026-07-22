@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../design/gaze_theme.dart';
@@ -24,15 +26,40 @@ class _DesktopShellState extends State<DesktopShell> {
   List<AlbumSummary> _albums = const [];
   bool _loading = false;
   String? _error;
+  StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
 
   bool get _connected => widget.connectionController.state.isConnected;
 
   @override
   void initState() {
     super.initState();
+    _connectionSubscription = widget.connectionController.states.listen(
+      _handleConnectionState,
+    );
     if (_connected) {
       _loadAlbums();
     }
+  }
+
+  void _handleConnectionState(JellyfinConnectionState state) {
+    if (!mounted) {
+      return;
+    }
+    if (state.isConnected) {
+      _loadAlbums();
+    } else {
+      setState(() {
+        _albums = const [];
+        _loading = state.status == JellyfinConnectionStatus.connecting;
+        _error = state.errorMessage;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_connectionSubscription?.cancel());
+    super.dispose();
   }
 
   Future<void> _loadAlbums() async {

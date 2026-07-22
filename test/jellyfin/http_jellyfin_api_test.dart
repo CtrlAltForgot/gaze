@@ -152,6 +152,33 @@ void main() {
       api.close();
     });
 
+    test('validates a restored session without a token URL', () async {
+      final client = MockClient((request) async {
+        expect(request.url.toString(), 'https://music.example/Users/Me');
+        expect(request.url.query, isNot(contains('private-access-token')));
+        expect(
+          request.headers['authorization'],
+          contains('Token="private-access-token"'),
+        );
+        return http.Response(
+          jsonEncode({'Id': 'user-id', 'Name': 'listener'}),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      await api.validateSession(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+      );
+
+      api.close();
+    });
+
     test('reports HTTP status without exposing a private response', () async {
       final client = MockClient(
         (_) async => http.Response('private server response', 401),

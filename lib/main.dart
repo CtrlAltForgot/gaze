@@ -32,6 +32,7 @@ void main() {
       connectionController: connectionController,
     ),
   );
+  unawaited(connectionController.restore());
 }
 
 class GazeApp extends StatefulWidget {

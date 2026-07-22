@@ -16,8 +16,9 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete for initial direction:** Phase 2's first desktop shell received manual visual approval; deeper UI work is paused until real library data is available.
 - **Active:** a narrow Phase 3/4 vertical slice containing the platform-neutral connection models, Jellyfin transport, authentication boundary, OS-backed token storage, and a temporary connection screen.
 - **Complete:** secure token persistence and real-server authentication manually verified on Linux.
-- **Active:** one read-only Jellyfin music-library slice is implemented: recently added albums and authenticated artwork on Home. Real-library and visual validation are pending.
-- **Next:** after approval of the Home slice, persist non-secret connection configuration and restore the saved Jellyfin session at startup.
+- **Complete:** the first read-only Jellyfin music-library slice displays real recently added albums and authenticated artwork on Home and received manual visual approval on Linux.
+- **Complete on Linux:** saved-session restoration validates the stored token and automatically reloads Home after restart; the user manually verified the restart sequence.
+- **Active:** make Albums the first functional library destination, then connect album selection to a read-only track listing before playback wiring.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -96,8 +97,22 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 - Create sanitized response fixtures containing no personal server, account, or library information.
 - Add connection setup and one read-only library slice first, preferably recently added albums. Add broader album, artist, and search capabilities only in later focused tasks.
 - Handle unreachable servers, expired sessions, malformed responses, empty libraries, and cancellation.
+- After browsing and playback are stable, add a separate library-maintenance phase for safe playlist management and metadata correction. Preview changes, distinguish deleting a Jellyfin playlist from deleting media files, and require explicit confirmation for destructive operations.
 
 **Exit check:** contract tests use sanitized fixtures, unit tests use a fake transport, secrets are absent from Git and logs, and a documented manual test can authenticate and browse the first read-only library slice on the intended server.
+
+## Later library maintenance — metadata and playlist repair
+
+**Goal:** help listeners repair imperfect owned libraries without requiring a destructive rebuild.
+
+- Surface missing artwork, unknown artists, suspicious album grouping, and incomplete tags.
+- Edit supported Jellyfin metadata through a reviewed adapter, with before/after previews and clear server-side effects.
+- Create, rename, edit, and delete Jellyfin playlist objects separately from media-file operations.
+- Never infer that an imported playlist folder is an album correction without user review.
+- Treat deleting media files as a distinct high-risk action requiring explicit confirmation and a documented recovery expectation.
+- Consider external tag-writing or identification tools only through a focused design and safety review; do not silently rewrite the user's source files.
+
+**Exit check:** sanitized tests cover previews, permission errors, partial failures, and destructive-action confirmation; the user manually verifies changes against a backed-up test subset before broader use.
 
 ## Phase 5 — playback adapter and basic player
 

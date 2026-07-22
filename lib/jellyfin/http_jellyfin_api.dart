@@ -143,6 +143,26 @@ class HttpJellyfinApi implements JellyfinApi {
     return albums;
   }
 
+  @override
+  Future<void> validateSession({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+  }) async {
+    final response = await _request(
+      () => _client.get(
+        address.endpoint('/Users/Me'),
+        headers: _authenticatedHeaders(session),
+      ),
+    );
+    _requireSuccess(response, operation: 'restore the Jellyfin session');
+    final json = _decodeObject(response.body);
+    if (_requiredString(json, 'Id') != session.userId) {
+      throw const JellyfinConnectionException(
+        'The saved Jellyfin session belongs to a different user.',
+      );
+    }
+  }
+
   Map<String, String> _authenticatedHeaders(JellyfinSession session) => {
     'Accept': 'application/json',
     'Authorization': _authorizationHeader(token: session.accessToken),

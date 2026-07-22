@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,7 +10,8 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
     FlutterSecureStorage storage = const FlutterSecureStorage(),
   }) : _storage = storage;
 
-  static const _accessTokenKey = 'gaze.jellyfin.access_token';
+  static const _connectionKey = 'gaze.jellyfin.connection';
+  static const _legacyAccessTokenKey = 'gaze.jellyfin.access_token';
   static const _deviceIdKey = 'gaze.installation.device_id';
 
   final FlutterSecureStorage _storage;
@@ -31,12 +33,58 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
   }
 
   @override
-  Future<String?> readAccessToken() => _storage.read(key: _accessTokenKey);
+  Future<SavedJellyfinConnection?> readConnection() async {
+    final encoded = await _storage.read(key: _connectionKey);
+    if (encoded == null || encoded.isEmpty) {
+      return null;
+    }
+    try {
+      final value = jsonDecode(encoded);
+      if (value is! Map<String, dynamic>) {
+        return null;
+      }
+      final serverAddress = value['serverAddress'];
+      final accessToken = value['accessToken'];
+      final userId = value['userId'];
+      final userName = value['userName'];
+      if (serverAddress is! String ||
+          accessToken is! String ||
+          userId is! String ||
+          userName is! String ||
+          serverAddress.isEmpty ||
+          accessToken.isEmpty ||
+          userId.isEmpty ||
+          userName.isEmpty) {
+        return null;
+      }
+      return SavedJellyfinConnection(
+        serverAddress: serverAddress,
+        accessToken: accessToken,
+        userId: userId,
+        userName: userName,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
 
   @override
-  Future<void> writeAccessToken(String token) =>
-      _storage.write(key: _accessTokenKey, value: token);
+  Future<void> writeConnection(SavedJellyfinConnection connection) async {
+    await _storage.write(
+      key: _connectionKey,
+      value: jsonEncode({
+        'serverAddress': connection.serverAddress,
+        'accessToken': connection.accessToken,
+        'userId': connection.userId,
+        'userName': connection.userName,
+      }),
+    );
+    await _storage.delete(key: _legacyAccessTokenKey);
+  }
 
   @override
-  Future<void> deleteAccessToken() => _storage.delete(key: _accessTokenKey);
+  Future<void> deleteConnection() async {
+    await _storage.delete(key: _connectionKey);
+    await _storage.delete(key: _legacyAccessTokenKey);
+  }
 }

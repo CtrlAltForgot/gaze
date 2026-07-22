@@ -1,6 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaze/jellyfin/flutter_secure_jellyfin_credential_store.dart';
+import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 
 void main() {
   setUp(() {
@@ -17,13 +18,23 @@ void main() {
     expect(second, first);
   });
 
-  test('writes, reads, and deletes the access token', () async {
+  test('writes, reads, and deletes the saved connection', () async {
     const store = FlutterSecureJellyfinCredentialStore();
+    const connection = SavedJellyfinConnection(
+      serverAddress: 'http://music.local:8096',
+      accessToken: 'test-token',
+      userId: 'user-id',
+      userName: 'listener',
+    );
 
-    expect(await store.readAccessToken(), isNull);
-    await store.writeAccessToken('test-token');
-    expect(await store.readAccessToken(), 'test-token');
-    await store.deleteAccessToken();
-    expect(await store.readAccessToken(), isNull);
+    expect(await store.readConnection(), isNull);
+    await store.writeConnection(connection);
+    final restored = await store.readConnection();
+    expect(restored?.serverAddress, connection.serverAddress);
+    expect(restored?.accessToken, connection.accessToken);
+    expect(restored?.userId, connection.userId);
+    expect(restored?.userName, connection.userName);
+    await store.deleteConnection();
+    expect(await store.readConnection(), isNull);
   });
 }

@@ -70,7 +70,14 @@ class JellyfinConnectionController {
         userName: userName,
         password: password,
       );
-      await _credentialStore.writeAccessToken(session.accessToken);
+      await _credentialStore.writeConnection(
+        SavedJellyfinConnection(
+          serverAddress: address.toString(),
+          accessToken: session.accessToken,
+          userId: session.userId,
+          userName: session.userName,
+        ),
+      );
       _emit(
         JellyfinConnectionState(
           status: JellyfinConnectionStatus.connected,
@@ -90,6 +97,53 @@ class JellyfinConnectionController {
     }
   }
 
+  Future<void> restore() async {
+    if (_state.status != JellyfinConnectionStatus.idle) {
+      return;
+    }
+    _emit(
+      const JellyfinConnectionState(
+        status: JellyfinConnectionStatus.connecting,
+      ),
+    );
+    try {
+      final saved = await _credentialStore.readConnection();
+      if (saved == null) {
+        _emit(const JellyfinConnectionState());
+        return;
+      }
+      final address = JellyfinServerAddress.parse(saved.serverAddress);
+      final deviceId = await _credentialStore.getOrCreateDeviceId();
+      final api = _apiFactory(deviceId);
+      _api?.close();
+      _api = api;
+      final session = JellyfinSession(
+        accessToken: saved.accessToken,
+        userId: saved.userId,
+        userName: saved.userName,
+      );
+      final serverInfo = await api.getPublicServerInfo(address);
+      await api.validateSession(address: address, session: session);
+      _emit(
+        JellyfinConnectionState(
+          status: JellyfinConnectionStatus.connected,
+          serverAddress: address,
+          serverInfo: serverInfo,
+          session: session,
+        ),
+      );
+    } on JellyfinConnectionException catch (error) {
+      await _credentialStore.deleteConnection();
+      _emit(JellyfinConnectionState(errorMessage: error.message));
+    } catch (_) {
+      _emit(
+        const JellyfinConnectionState(
+          errorMessage: 'gaze could not restore the saved Jellyfin session.',
+        ),
+      );
+    }
+  }
+
   Future<void> disconnect() async {
     if (_state.status == JellyfinConnectionStatus.disconnecting) {
       return;
@@ -103,7 +157,7 @@ class JellyfinConnectionController {
       ),
     );
     try {
-      await _credentialStore.deleteAccessToken();
+      await _credentialStore.deleteConnection();
       _emit(const JellyfinConnectionState());
     } catch (_) {
       _emit(

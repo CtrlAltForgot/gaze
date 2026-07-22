@@ -11,7 +11,7 @@ The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin
 - **macOS:** runner and build files generated; build and launch validation pending on macOS.
 - **Android, iOS, and web:** outside the current project scope and not generated.
 - **Dependencies:** the playback spike selected `media_kit` and `media_kit_libs_audio`; `file_picker` supports the disposable local-file test.
-- **Jellyfin:** HTTP and HTTPS authentication works on Linux. Tokens use the OS credential store; passwords are not persisted. Recently added albums and artwork are the active read-only library slice.
+- **Jellyfin:** HTTP and HTTPS authentication works on Linux. Tokens and minimum resume information use the OS credential store; passwords are not persisted. Recently added albums, authenticated artwork, and saved-session restoration are manually verified on Linux.
 
 The isolated playback spike selected `media_kit` 1.2.6 with `media_kit_libs_audio` 1.0.7 and uses `file_picker` 11.0.2 only for the disposable local-file test. With Fedora/Nobara's `mpv-libs` runtime installed, the backend initializes and local play, pause, resume, seeking, volume, and stop were manually verified on Linux. Authenticated remote playback is deferred to Jellyfin integration. Gapless playback, track completion, long-session stability, Windows, and macOS remain untested. See [docs/PLAYBACK_SPIKE.md](docs/PLAYBACK_SPIKE.md) for the full decision record.
 

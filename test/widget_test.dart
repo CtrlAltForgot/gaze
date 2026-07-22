@@ -179,19 +179,22 @@ class FakePlaybackController implements PlaybackController {
 }
 
 class FakeCredentialStore implements JellyfinCredentialStore {
-  String? accessToken;
+  SavedJellyfinConnection? connection;
+
+  String? get accessToken => connection?.accessToken;
 
   @override
-  Future<void> deleteAccessToken() async => accessToken = null;
+  Future<void> deleteConnection() async => connection = null;
 
   @override
   Future<String> getOrCreateDeviceId() async => 'test-device-id';
 
   @override
-  Future<String?> readAccessToken() async => accessToken;
+  Future<SavedJellyfinConnection?> readConnection() async => connection;
 
   @override
-  Future<void> writeAccessToken(String token) async => accessToken = token;
+  Future<void> writeConnection(SavedJellyfinConnection value) async =>
+      connection = value;
 }
 
 class FakeJellyfinApi implements JellyfinApi {
@@ -230,4 +233,10 @@ class FakeJellyfinApi implements JellyfinApi {
       version: '10.11.0',
     );
   }
+
+  @override
+  Future<void> validateSession({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+  }) async {}
 }
