@@ -13,9 +13,9 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete:** repository and Flutter desktop foundation on Linux.
 - **Complete:** generated Linux, Windows, and macOS runners; Windows and macOS validation remains pending on their respective operating systems.
 - **Complete:** Linux playback foundation selection and local media controls using media-kit.
-- **Next:** Phase 2, a small desktop visual foundation using in-memory sample content and mandatory manual UI review.
-- **Then:** Phase 3, pure Dart music-library models and application contracts.
-- **Then:** Phase 4, secure Jellyfin connection followed by one read-only library slice.
+- **Complete for initial direction:** Phase 2's first desktop shell received manual visual approval; deeper UI work is paused until real library data is available.
+- **Active:** a narrow Phase 3/4 vertical slice containing only the platform-neutral connection models, Jellyfin transport, authentication boundary, and tests needed to connect safely.
+- **Next:** secure token persistence and a temporary connection flow, followed by one read-only Jellyfin music-library slice.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -70,6 +70,8 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** model music behavior without Flutter, Jellyfin, or a database.
 
+**Current status:** active in a deliberately narrow form. Add only the server, session, and music-library contracts required by the first Jellyfin connection slice; broader queue and library behavior remains later work.
+
 - Add domain entities for artists, albums, tracks, playlists, library identifiers, and playback items.
 - Define repository, playback, queue, and cache interfaces.
 - Implement small use cases such as loading a home section and changing favorites against fakes.
@@ -82,8 +84,11 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** authenticate safely and browse a real Jellyfin music library.
 
+**Current status:** active. The tested transport foundation now accepts `http://` and `https://` addresses, preserves optional Jellyfin base paths, probes public server information, and parses username/password authentication into an in-memory session behind an injectable interface. Plain HTTP is supported for the user's trusted local network and documented as unencrypted. No real address or credential has entered the repository. Next are approved secure token storage and a temporary connection flow, followed by a real-server connection test.
+
 - Confirm the Jellyfin server/API version and connection expectations without recording a private address, username, or token in the repository.
-- Compare current cross-platform HTTP and secure credential-storage packages before adding dependencies; document Linux, Windows, and macOS support and native requirements.
+- Use the maintained `package:http` client behind an injectable transport boundary on Linux, Windows, and macOS.
+- Use `flutter_secure_storage` for access tokens only after its Linux `libsecret-devel` build requirement is approved and available; never store the account password.
 - Implement Jellyfin HTTP transport, authentication, session expiry, pagination, error mapping, and DTO-to-domain mapping behind repository interfaces.
 - Store the access token through an OS credential-store adapter; keep the non-secret server configuration separately.
 - Create sanitized response fixtures containing no personal server, account, or library information.
