@@ -76,6 +76,7 @@ class _GazeAppState extends State<GazeApp> {
           onClose: () => setState(() => _screen = _DevelopmentScreen.shell),
         ),
         _DevelopmentScreen.shell => DesktopShell(
+          connectionController: widget.connectionController,
           onOpenJellyfinConnection: () =>
               setState(() => _screen = _DevelopmentScreen.jellyfinConnection),
           onOpenPlaybackTest: () =>

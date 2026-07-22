@@ -2,7 +2,7 @@
 
 gaze is a desktop-first music client targeting Linux, Windows, and macOS. Linux on Nobara is the active development and testing platform. gaze will connect to a Jellyfin music library hosted on an Unraid server. The product name is always displayed in lowercase.
 
-The basic Flutter desktop project is initialized. Its neutral verification shell has been analyzed, tested, built, and started on Linux. Windows and macOS runner files are generated but have not been built or run on those operating systems, so they are not yet validated. The repository and working checkpoint history are healthy.
+The Flutter desktop foundation, media-kit playback boundary, and secure Jellyfin connection flow are established. Authentication against the intended Jellyfin server has been manually verified on Linux. The current development slice loads recently added albums and artwork into Home; it still requires real-library visual approval. Windows and macOS runner files are generated but have not been built or run on those operating systems.
 
 ## Verified development status
 
@@ -11,6 +11,7 @@ The basic Flutter desktop project is initialized. Its neutral verification shell
 - **macOS:** runner and build files generated; build and launch validation pending on macOS.
 - **Android, iOS, and web:** outside the current project scope and not generated.
 - **Dependencies:** the playback spike selected `media_kit` and `media_kit_libs_audio`; `file_picker` supports the disposable local-file test.
+- **Jellyfin:** HTTP and HTTPS authentication works on Linux. Tokens use the OS credential store; passwords are not persisted. Recently added albums and artwork are the active read-only library slice.
 
 The isolated playback spike selected `media_kit` 1.2.6 with `media_kit_libs_audio` 1.0.7 and uses `file_picker` 11.0.2 only for the disposable local-file test. With Fedora/Nobara's `mpv-libs` runtime installed, the backend initializes and local play, pause, resume, seeking, volume, and stop were manually verified on Linux. Authenticated remote playback is deferred to Jellyfin integration. Gapless playback, track completion, long-session stability, Windows, and macOS remain untested. See [docs/PLAYBACK_SPIKE.md](docs/PLAYBACK_SPIKE.md) for the full decision record.
 
@@ -109,6 +110,6 @@ The Flutter Linux toolchain has since been verified outside the earlier read-onl
 
 1. Read `AGENTS.md`, `PROJECT_PLAN.md`, and `DESIGN_DIRECTION.md`.
 2. Confirm `git status` is clean and review the latest checkpoint.
-3. Confirm Phase 0 remains complete and do not begin interface design.
-4. Take only the next task: the isolated cross-platform playback feasibility spike described in `PROJECT_PLAN.md`.
-5. Test playback behavior on Linux, research package support and native requirements for all three desktop platforms, and clearly leave Windows and macOS execution validation pending.
+3. Confirm the current phase in `PROJECT_PLAN.md` and choose one small exit check.
+4. Preserve the connection, playback, and library boundaries; do not place tokens in URLs, logs, fixtures, or ordinary storage.
+5. Run the automated and manual UI-review workflow before checkpointing visible work. Windows and macOS execution validation remains pending.

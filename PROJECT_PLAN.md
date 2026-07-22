@@ -16,7 +16,8 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete for initial direction:** Phase 2's first desktop shell received manual visual approval; deeper UI work is paused until real library data is available.
 - **Active:** a narrow Phase 3/4 vertical slice containing the platform-neutral connection models, Jellyfin transport, authentication boundary, OS-backed token storage, and a temporary connection screen.
 - **Complete:** secure token persistence and real-server authentication manually verified on Linux.
-- **Next:** add one read-only Jellyfin music-library slice: recently added albums and artwork on Home.
+- **Active:** one read-only Jellyfin music-library slice is implemented: recently added albums and authenticated artwork on Home. Real-library and visual validation are pending.
+- **Next:** after approval of the Home slice, persist non-secret connection configuration and restore the saved Jellyfin session at startup.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -85,7 +86,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** authenticate safely and browse a real Jellyfin music library.
 
-**Current status:** active. The tested transport foundation accepts `http://` and `https://` addresses, preserves optional Jellyfin base paths, probes public server information, and parses username/password authentication behind an injectable interface. The temporary connection screen never saves the password; it stores the returned access token and stable installation device ID through the operating system credential store. Plain HTTP is supported for the user's trusted local network and documented as unencrypted. No real address or credential has entered the repository. Automated tests pass for the connection boundary, and the user manually verified authentication against the intended Jellyfin server on Linux. The next slice is recently added albums and artwork on Home.
+**Current status:** active. The tested transport foundation accepts `http://` and `https://` addresses, preserves optional Jellyfin base paths, probes public server information, and parses username/password authentication behind an injectable interface. The temporary connection screen never saves the password; it stores the returned access token and stable installation device ID through the operating system credential store. Plain HTTP is supported for the user's trusted local network and documented as unencrypted. No real address or credential has entered the repository. The user manually verified authentication against the intended Jellyfin server on Linux. gaze now requests recently added music albums, maps them to a platform-neutral model, and fetches artwork with authenticated headers rather than token-bearing URLs. Automated coverage is complete; real-library content and visual behavior still require manual approval. Saved-session restoration, pagination, and broader library pages remain later focused slices.
 
 - Confirm the Jellyfin server/API version and connection expectations without recording a private address, username, or token in the repository.
 - Use the maintained `package:http` client behind an injectable transport boundary on Linux, Windows, and macOS.

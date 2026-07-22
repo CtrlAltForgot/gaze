@@ -107,6 +107,51 @@ void main() {
       api.close();
     });
 
+    test('loads albums and artwork with authenticated headers', () async {
+      final client = MockClient((request) async {
+        expect(request.url.query, isNot(contains('private-access-token')));
+        expect(
+          request.headers['authorization'],
+          contains('Token="private-access-token"'),
+        );
+        if (request.url.path.endsWith('/Items/album-id/Images/Primary')) {
+          return http.Response.bytes([1, 2, 3], 200);
+        }
+        expect(request.url.path, '/Users/user-id/Items');
+        expect(request.url.queryParameters['IncludeItemTypes'], 'MusicAlbum');
+        expect(request.url.queryParameters['SortBy'], 'DateCreated');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Id': 'album-id',
+                'Name': 'Real Album',
+                'AlbumArtist': 'Real Artist',
+                'ImageTags': {'Primary': 'image-tag'},
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final albums = await api.getRecentlyAddedAlbums(
+        address: JellyfinServerAddress.parse('http://music.local:8096'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+      );
+
+      expect(albums, hasLength(1));
+      expect(albums.single.title, 'Real Album');
+      expect(albums.single.artist, 'Real Artist');
+      expect(albums.single.artworkBytes, [1, 2, 3]);
+      api.close();
+    });
+
     test('reports HTTP status without exposing a private response', () async {
       final client = MockClient(
         (_) async => http.Response('private server response', 401),

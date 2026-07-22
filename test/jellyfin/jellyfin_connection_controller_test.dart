@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
+import 'package:gaze/library/album_summary.dart';
 
 void main() {
   test('connects and saves only the returned access token', () async {
@@ -87,6 +88,13 @@ class RecordingJellyfinApi implements JellyfinApi {
   String? receivedPassword;
 
   @override
+  Future<List<AlbumSummary>> getRecentlyAddedAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    int limit = 10,
+  }) async => const [];
+
+  @override
   Future<JellyfinSession> authenticate({
     required JellyfinServerAddress address,
     required String userName,
@@ -116,6 +124,13 @@ class RecordingJellyfinApi implements JellyfinApi {
 }
 
 class FailingJellyfinApi implements JellyfinApi {
+  @override
+  Future<List<AlbumSummary>> getRecentlyAddedAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    int limit = 10,
+  }) async => const [];
+
   @override
   Future<JellyfinSession> authenticate({
     required JellyfinServerAddress address,

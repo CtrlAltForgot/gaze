@@ -1,3 +1,5 @@
+import '../library/album_summary.dart';
+
 class JellyfinServerAddress {
   JellyfinServerAddress._(this.uri);
 
@@ -87,6 +89,12 @@ abstract interface class JellyfinApi {
     required JellyfinServerAddress address,
     required String userName,
     required String password,
+  });
+
+  Future<List<AlbumSummary>> getRecentlyAddedAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    int limit = 10,
   });
 
   void close();

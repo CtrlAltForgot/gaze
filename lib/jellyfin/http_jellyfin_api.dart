@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../library/album_summary.dart';
 import 'jellyfin_api.dart';
 
 class HttpJellyfinApi implements JellyfinApi {
@@ -75,6 +77,111 @@ class HttpJellyfinApi implements JellyfinApi {
       userId: _requiredString(user, 'Id'),
       userName: _requiredString(user, 'Name'),
     );
+  }
+
+  @override
+  Future<List<AlbumSummary>> getRecentlyAddedAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    int limit = 10,
+  }) async {
+    if (limit < 1) {
+      throw ArgumentError.value(limit, 'limit', 'must be positive');
+    }
+    final uri = address
+        .endpoint('/Users/${session.userId}/Items')
+        .replace(
+          queryParameters: {
+            'IncludeItemTypes': 'MusicAlbum',
+            'Recursive': 'true',
+            'SortBy': 'DateCreated',
+            'SortOrder': 'Descending',
+            'Limit': '$limit',
+            'Fields': 'AlbumArtist,DateCreated',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'load recently added albums');
+    final json = _decodeObject(response.body);
+    final items = json['Items'];
+    if (items is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an incomplete album list.',
+      );
+    }
+
+    final albums = <AlbumSummary>[];
+    for (final value in items) {
+      if (value is! Map<String, dynamic>) {
+        continue;
+      }
+      final id = value['Id'];
+      final title = value['Name'];
+      if (id is! String || id.isEmpty || title is! String || title.isEmpty) {
+        continue;
+      }
+      final artist = _albumArtist(value);
+      final hasArtwork =
+          value['ImageTags'] is Map &&
+          (value['ImageTags'] as Map).containsKey('Primary');
+      final artwork = hasArtwork
+          ? await _loadArtwork(address, session, id)
+          : null;
+      albums.add(
+        AlbumSummary(
+          id: id,
+          title: title,
+          artist: artist,
+          artworkBytes: artwork,
+        ),
+      );
+    }
+    return albums;
+  }
+
+  Map<String, String> _authenticatedHeaders(JellyfinSession session) => {
+    'Accept': 'application/json',
+    'Authorization': _authorizationHeader(token: session.accessToken),
+  };
+
+  String _albumArtist(Map<String, dynamic> item) {
+    final albumArtist = item['AlbumArtist'];
+    if (albumArtist is String && albumArtist.isNotEmpty) {
+      return albumArtist;
+    }
+    final artists = item['AlbumArtists'];
+    if (artists is List && artists.isNotEmpty) {
+      final first = artists.first;
+      if (first is Map && first['Name'] is String) {
+        return first['Name'] as String;
+      }
+    }
+    return 'Unknown artist';
+  }
+
+  Future<Uint8List?> _loadArtwork(
+    JellyfinServerAddress address,
+    JellyfinSession session,
+    String itemId,
+  ) async {
+    try {
+      final uri = address
+          .endpoint('/Items/$itemId/Images/Primary')
+          .replace(queryParameters: const {'maxWidth': '600', 'quality': '90'});
+      final response = await _request(
+        () => _client.get(uri, headers: _authenticatedHeaders(session)),
+      );
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return response.bodyBytes;
+      }
+    } on JellyfinConnectionException {
+      // Missing artwork must not prevent the album list from loading.
+    }
+    return null;
   }
 
   String _authorizationHeader({String? token}) {

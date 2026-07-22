@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../library/album_summary.dart';
 import 'jellyfin_api.dart';
 import 'jellyfin_credential_store.dart';
 
@@ -115,6 +116,25 @@ class JellyfinConnectionController {
         ),
       );
     }
+  }
+
+  Future<List<AlbumSummary>> loadRecentlyAddedAlbums({int limit = 10}) async {
+    final api = _api;
+    final address = _state.serverAddress;
+    final session = _state.session;
+    if (!_state.isConnected ||
+        api == null ||
+        address == null ||
+        session == null) {
+      throw const JellyfinConnectionException(
+        'Connect to Jellyfin before loading your library.',
+      );
+    }
+    return api.getRecentlyAddedAlbums(
+      address: address,
+      session: session,
+      limit: limit,
+    );
   }
 
   void _emit(JellyfinConnectionState state) {

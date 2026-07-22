@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
+import 'package:gaze/library/album_summary.dart';
 import 'package:gaze/main.dart';
 import 'package:gaze/playback/playback_controller.dart';
 
@@ -21,9 +22,9 @@ void main() {
 
     expect(find.text('g'), findsOneWidget);
     expect(find.text('Your music, brought forward.'), findsOneWidget);
-    expect(find.text('Recently added'), findsOneWidget);
+    expect(find.text('Recently added'), findsNothing);
     expect(find.text('Nothing playing'), findsOneWidget);
-    expect(find.text('Northern Lines'), findsOneWidget);
+    expect(find.text('Connect your Jellyfin library'), findsOneWidget);
   });
 
   testWidgets('keeps the playback technical test reachable', (tester) async {
@@ -99,6 +100,29 @@ void main() {
     expect(find.text('Connected to Music Server'), findsOneWidget);
     expect(credentials.accessToken, 'test-access-token');
   });
+
+  testWidgets('shows real recently added albums after connection', (
+    tester,
+  ) async {
+    final connectionController = createFakeConnectionController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: FakePlaybackController(),
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Real Album'), findsOneWidget);
+    expect(find.text('Real Artist'), findsOneWidget);
+    expect(find.text('Northern Lines'), findsNothing);
+  });
 }
 
 JellyfinConnectionController createFakeConnectionController([
@@ -171,6 +195,15 @@ class FakeCredentialStore implements JellyfinCredentialStore {
 }
 
 class FakeJellyfinApi implements JellyfinApi {
+  @override
+  Future<List<AlbumSummary>> getRecentlyAddedAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    int limit = 10,
+  }) async => const [
+    AlbumSummary(id: 'album-id', title: 'Real Album', artist: 'Real Artist'),
+  ];
+
   @override
   Future<JellyfinSession> authenticate({
     required JellyfinServerAddress address,
