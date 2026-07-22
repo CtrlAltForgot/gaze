@@ -45,6 +45,30 @@ Long-term capabilities include library browsing, search, favorites, playlists, a
 - Test failure and offline states, not only successful server responses.
 - Prefer structured logging that excludes credentials and sensitive URLs.
 
+## Manual UI review rule
+
+Whenever a task creates or changes anything visible in the gaze interface:
+
+1. Run the automated checks first:
+   - `dart format .`
+   - `flutter analyze`
+   - `flutter test`
+   - `flutter build linux --debug`
+2. Do not consider the UI task complete based only on automated tests.
+3. After the checks pass, attempt to launch gaze with `flutter run -d linux`.
+4. If the execution environment cannot display the graphical window, clearly state that limitation and give the user this exact normal-Konsole command: `cd /home/user/Projects/gaze && flutter run -d linux`.
+5. Tell the user which refresh procedure applies:
+   - For ordinary Dart and widget changes, press `r` in the active Flutter terminal to hot reload.
+   - For dependency, plugin, runner, or native changes, stop the app with `Ctrl+C` and launch it again.
+6. Stop before committing any meaningful visual change unless the user has manually inspected and approved the result.
+7. Ask the user to provide:
+   - A screenshot
+   - What looks wrong
+   - What feels unintuitive
+   - Any animation, sizing, spacing, scrolling, or interaction feedback
+8. After the user approves the visible result, create the requested Git checkpoint.
+9. Never claim that a UI looks correct merely because it compiled or launched.
+
 ## Starting a development session
 
 1. Read `README.md`, `PROJECT_PLAN.md`, `DESIGN_DIRECTION.md`, and this file.

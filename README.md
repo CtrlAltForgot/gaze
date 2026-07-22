@@ -61,6 +61,16 @@ Qt/QML would be the main alternative. It offers excellent Linux and KDE integrat
 
 Flutter's principal uncertainty is not the interface: it is dependable Linux audio playback and packaging. That is why playback is a measured spike before building the full player. If the spike reveals unacceptable format, gapless, streaming, or runtime-dependency problems, Qt/QML should be reconsidered before substantial UI investment.
 
+## Testing gaze during development
+
+Launch gaze on Linux from a normal Konsole with:
+
+```bash
+cd /home/user/Projects/gaze && flutter run -d linux
+```
+
+For ordinary Dart or widget changes while Flutter is still running, press `r` in that terminal to hot reload the updated code. Dependency, plugin, runner, and native changes require stopping the app with `Ctrl+C` and launching it again.
+
 ## Current tool inventory
 
 Inspected on Nobara Linux 44 KDE, x86-64. Nothing was installed by this project setup.
