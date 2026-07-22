@@ -4,7 +4,7 @@ This file defines the working rules for every person or coding agent contributin
 
 ## Product boundary
 
-gaze is a desktop-first music client for Nobara Linux. Its first server is Jellyfin running on an Unraid server. A separate mobile application may be built later, but mobile constraints must not weaken the desktop experience.
+gaze is a desktop-first music client targeting Linux, Windows, and macOS. Nobara Linux is the active development and testing platform. Windows and macOS support must be included architecturally but must not be described as tested until builds run on those operating systems. Its first server is Jellyfin running on an Unraid server. A separate mobile application may be built later, but mobile constraints must not weaken the desktop experience.
 
 The desktop interface should combine artwork-led polish and purposeful animation with familiar, easy-to-understand music organization. It must have its own identity and must not reproduce Apple Music or Spotify screens. Design for monitors, mouse, keyboard, and touch displays; do not build a phone layout enlarged to fill a monitor.
 
@@ -31,9 +31,10 @@ Long-term capabilities include library browsing, search, favorites, playlists, a
 - Jellyfin transport and response parsing sit behind repository interfaces. Jellyfin objects must be translated into gaze domain models at the boundary.
 - Playback sits behind a small application-facing interface. UI code must not call a media engine directly.
 - Persistence and artwork caching are infrastructure concerns accessed through interfaces, not global utilities used from widgets.
-- MPRIS and future DeskStrip support are independent adapters that observe playback state and submit commands through the same playback controller used by the UI.
+- Linux MPRIS, Windows media sessions, macOS Now Playing, and future DeskStrip support are independent adapters that observe playback state and submit commands through the same playback controller used by the UI.
 - Shared packages may support a future mobile client, but desktop-only behavior must not leak into shared packages.
 - Keep authentication tokens in an OS credential store when that work is implemented; ordinary preferences and databases are not secret stores.
+- Check every future dependency for maintained Linux, Windows, and macOS support before adoption, and document any platform-specific runtime requirements.
 
 ## Quality expectations
 
@@ -51,4 +52,3 @@ Long-term capabilities include library browsing, search, favorites, playlists, a
 3. Confirm the current phase and choose one small task with a clear completion check.
 4. Check the relevant tools and dependencies without installing anything automatically.
 5. Implement only that task, run its checks, and report exactly what changed and what remains.
-

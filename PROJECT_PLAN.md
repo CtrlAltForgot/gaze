@@ -6,29 +6,30 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 
 **Goal:** establish a safe repository and prove the intended toolchain.
 
-- Confirm Git health and create the first documentation checkpoint before implementation.
-- Run the Flutter diagnostic successfully and record any genuinely required Nobara packages.
+- **Complete on Linux:** Git health, the documentation checkpoint, Flutter environment verification, dependency resolution, formatting, analysis, widget tests, and a Linux debug build.
+- **Complete on Linux:** the generated desktop shell starts under `flutter run -d linux`; visual confirmation was unavailable in the automated execution environment.
+- **Generated, validation pending:** Windows runner and build configuration. Validate on Windows before claiming support is tested.
+- **Generated, validation pending:** macOS runner and build configuration. Validate on macOS before claiming support is tested.
 - Record architecture decisions for playback, local persistence, credential storage, and state management.
-- Create a minimal Flutter Linux project only after the toolchain check is understood.
-- Establish formatting, analysis, and test commands.
+- Keep future dependencies conditional on maintained Linux, Windows, and macOS support or a documented platform adapter strategy.
 
-**Exit check:** the untouched generated Linux application builds and launches, its tests pass, and the commands are documented. No product UI is required.
+**Exit check:** complete for the active Linux environment. The neutral generated shell resolves dependencies, formats, analyzes, tests, builds in debug mode, and starts. Windows and macOS build validation remain explicit future tasks on their respective operating systems.
 
-## Phase 1 — Linux playback feasibility spike
+## Phase 1 — cross-platform playback feasibility spike
 
-**Goal:** prove that Flutter can provide dependable music playback on the target Nobara desktop before investing in the real interface or player architecture.
+**Goal:** prove that Flutter has a practical playback path for Linux, Windows, and macOS before investing in the real interface or player architecture. Execute functional tests on Linux first and do not describe Windows or macOS behavior as tested until it is exercised on those systems.
 
 - Build a minimal, disposable test screen inside the generated application; it is test tooling, not the gaze interface.
-- Compare the most practical maintained Flutter Linux playback options, considering project activity, Linux support, API fit, packaging, licensing, and native runtime requirements.
+- Compare the most practical maintained Flutter playback options, considering project activity, Linux, Windows, and macOS support, API fit, packaging, licensing, and native runtime requirements.
 - Test a local audio file first, then a normal remote audio URL.
 - Provide a temporary way to test a Jellyfin direct-play URL later without saving the URL, token, headers, or credentials in source code, preferences, logs, or test fixtures.
 - Verify play, pause, seek, volume, track completion, and useful error reporting for each serious candidate.
 - Test consecutive compatible tracks and document whether true or acceptably seamless gapless playback appears feasible; do not claim gapless support from API documentation alone.
-- Record every required native build and runtime dependency, whether it is bundled, and how its presence was verified on Nobara.
+- Record every required native build and runtime dependency for Linux, Windows, and macOS and whether it is bundled. Distinguish documentation research from dependencies actually verified on Nobara.
 - Remove the disposable screen after the decision is documented, or keep it isolated from production code until the real playback adapter is implemented.
 - Do not create the real queue, persistent player bar, Now Playing interface, Jellyfin client, or final playback architecture during this spike.
 
-**Exit check:** a short decision record names the tested candidates and versions, commands and media cases actually tested, observed behavior, native dependencies, gapless findings, errors or limitations, and the recommended backend. The selected candidate has demonstrated the required controls with local and ordinary remote audio; Jellyfin direct play may remain a clearly documented follow-up if credentials are not yet available.
+**Exit check:** a short decision record names the candidates and versions, their stated desktop-platform support, commands and media cases actually tested on Linux, observed behavior, platform-specific native dependencies, gapless findings, errors or limitations, and the recommended backend. The selected candidate has demonstrated the required controls with local and ordinary remote audio on Linux; Jellyfin direct play and Windows/macOS execution may remain clearly documented follow-ups.
 
 ## Phase 2 — desktop design foundation
 
@@ -98,16 +99,18 @@ The plan deliberately favors small, verifiable steps. A phase begins only after 
 
 **Exit check:** each workflow has widget tests, keyboard coverage, defined loading/error/empty states, and a visual review against `DESIGN_DIRECTION.md`.
 
-## Phase 8 — Linux integrations
+## Phase 8 — desktop platform integrations
 
-**Goal:** behave like a well-integrated Linux media application.
+**Goal:** behave like a well-integrated application on each supported desktop platform without leaking platform behavior into shared application logic.
 
 - Implement MPRIS as a D-Bus adapter over the shared playback controller.
 - Validate metadata, position, seek, transport controls, and desktop media-key behavior.
+- Implement Windows media-session support as a separate adapter over the same playback controller and validate it on Windows.
+- Implement macOS Now Playing support as a separate adapter over the same playback controller and validate it on macOS.
 - Specify the DeskStrip protocol with versioning, capability discovery, and reconnect behavior.
 - Implement DeskStrip in a separate adapter without coupling it to widgets or the media engine.
 
-**Exit check:** D-Bus inspection and `playerctl`-style compatibility tests pass where tooling is available; DeskStrip can be disabled without changing playback behavior.
+**Exit check:** each platform adapter passes validation on its own operating system. D-Bus inspection and `playerctl`-style compatibility tests pass on Linux where tooling is available; DeskStrip can be disabled without changing playback behavior.
 
 ## Phase 9 — reliability and packaging
 
