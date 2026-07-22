@@ -1,4 +1,5 @@
 import '../library/album_summary.dart';
+import '../library/track_summary.dart';
 
 class JellyfinServerAddress {
   JellyfinServerAddress._(this.uri);
@@ -95,6 +96,20 @@ abstract interface class JellyfinApi {
     required JellyfinServerAddress address,
     required JellyfinSession session,
     int limit = 10,
+  });
+
+  Future<AlbumPage> getAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required AlbumSort sort,
+    required int startIndex,
+    required int limit,
+  });
+
+  Future<List<TrackSummary>> getAlbumTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String albumId,
   });
 
   Future<void> validateSession({

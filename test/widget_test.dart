@@ -6,6 +6,7 @@ import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
+import 'package:gaze/library/track_summary.dart';
 import 'package:gaze/main.dart';
 import 'package:gaze/playback/playback_controller.dart';
 
@@ -123,6 +124,37 @@ void main() {
     expect(find.text('Real Artist'), findsOneWidget);
     expect(find.text('Northern Lines'), findsNothing);
   });
+
+  testWidgets('browses albums and opens a track listing', (tester) async {
+    final connectionController = createFakeConnectionController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: FakePlaybackController(),
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('Albums'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 album'), findsOneWidget);
+    expect(find.text('Real Album'), findsOneWidget);
+    expect(find.text('Real Artist · 2026'), findsOneWidget);
+    expect(find.text('Load more'), findsNothing);
+
+    await tester.tap(find.text('Real Album'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('All albums'), findsOneWidget);
+    expect(find.text('Real Track'), findsOneWidget);
+    expect(find.text('3:12'), findsOneWidget);
+  });
 }
 
 JellyfinConnectionController createFakeConnectionController([
@@ -180,6 +212,7 @@ class FakePlaybackController implements PlaybackController {
 
 class FakeCredentialStore implements JellyfinCredentialStore {
   SavedJellyfinConnection? connection;
+  SavedJellyfinProfile? profile;
 
   String? get accessToken => connection?.accessToken;
 
@@ -193,19 +226,55 @@ class FakeCredentialStore implements JellyfinCredentialStore {
   Future<SavedJellyfinConnection?> readConnection() async => connection;
 
   @override
+  Future<SavedJellyfinProfile?> readProfile() async => profile;
+
+  @override
   Future<void> writeConnection(SavedJellyfinConnection value) async =>
       connection = value;
+
+  @override
+  Future<void> writeProfile(SavedJellyfinProfile value) async =>
+      profile = value;
 }
 
 class FakeJellyfinApi implements JellyfinApi {
+  static const album = AlbumSummary(
+    id: 'album-id',
+    title: 'Real Album',
+    artist: 'Real Artist',
+    year: 2026,
+  );
+
+  @override
+  Future<AlbumPage> getAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required AlbumSort sort,
+    required int startIndex,
+    required int limit,
+  }) async => const AlbumPage(albums: [album], totalCount: 1);
+
+  @override
+  Future<List<TrackSummary>> getAlbumTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String albumId,
+  }) async => const [
+    TrackSummary(
+      id: 'track-id',
+      title: 'Real Track',
+      artist: 'Real Artist',
+      duration: Duration(minutes: 3, seconds: 12),
+      trackNumber: 1,
+    ),
+  ];
+
   @override
   Future<List<AlbumSummary>> getRecentlyAddedAlbums({
     required JellyfinServerAddress address,
     required JellyfinSession session,
     int limit = 10,
-  }) async => const [
-    AlbumSummary(id: 'album-id', title: 'Real Album', artist: 'Real Artist'),
-  ];
+  }) async => const [album];
 
   @override
   Future<JellyfinSession> authenticate({

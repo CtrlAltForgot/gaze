@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../library/album_summary.dart';
+import '../library/track_summary.dart';
 import 'jellyfin_api.dart';
 import 'jellyfin_credential_store.dart';
 
@@ -44,6 +45,9 @@ class JellyfinConnectionController {
 
   Stream<JellyfinConnectionState> get states => _states.stream;
 
+  Future<SavedJellyfinProfile?> loadSavedProfile() =>
+      _credentialStore.readProfile();
+
   Future<void> connect({
     required String serverAddress,
     required String userName,
@@ -70,20 +74,34 @@ class JellyfinConnectionController {
         userName: userName,
         password: password,
       );
-      await _credentialStore.writeConnection(
-        SavedJellyfinConnection(
-          serverAddress: address.toString(),
-          accessToken: session.accessToken,
-          userId: session.userId,
-          userName: session.userName,
-        ),
-      );
+      String? persistenceWarning;
+      try {
+        await _credentialStore.writeConnection(
+          SavedJellyfinConnection(
+            serverAddress: address.toString(),
+            accessToken: session.accessToken,
+            userId: session.userId,
+            userName: session.userName,
+          ),
+        );
+        await _credentialStore.writeProfile(
+          SavedJellyfinProfile(
+            serverAddress: address.toString(),
+            userName: session.userName,
+          ),
+        );
+      } catch (_) {
+        persistenceWarning =
+            'Connected, but the system credential store could not save this '
+            'session. You may need to sign in again after restarting gaze.';
+      }
       _emit(
         JellyfinConnectionState(
           status: JellyfinConnectionStatus.connected,
           serverAddress: address,
           serverInfo: serverInfo,
           session: session,
+          errorMessage: persistenceWarning,
         ),
       );
     } on JellyfinConnectionException catch (error) {
@@ -91,7 +109,7 @@ class JellyfinConnectionController {
     } catch (_) {
       _emit(
         const JellyfinConnectionState(
-          errorMessage: 'gaze could not securely save the Jellyfin session.',
+          errorMessage: 'gaze encountered an unexpected connection error.',
         ),
       );
     }
@@ -173,6 +191,40 @@ class JellyfinConnectionController {
   }
 
   Future<List<AlbumSummary>> loadRecentlyAddedAlbums({int limit = 10}) async {
+    final (:api, :address, :session) = _requireConnection();
+    return api.getRecentlyAddedAlbums(
+      address: address,
+      session: session,
+      limit: limit,
+    );
+  }
+
+  Future<AlbumPage> loadAlbums({
+    required AlbumSort sort,
+    required int startIndex,
+    int limit = 24,
+  }) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.getAlbums(
+      address: address,
+      session: session,
+      sort: sort,
+      startIndex: startIndex,
+      limit: limit,
+    );
+  }
+
+  Future<List<TrackSummary>> loadAlbumTracks(String albumId) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.getAlbumTracks(
+      address: address,
+      session: session,
+      albumId: albumId,
+    );
+  }
+
+  ({JellyfinApi api, JellyfinServerAddress address, JellyfinSession session})
+  _requireConnection() {
     final api = _api;
     final address = _state.serverAddress;
     final session = _state.session;
@@ -184,11 +236,7 @@ class JellyfinConnectionController {
         'Connect to Jellyfin before loading your library.',
       );
     }
-    return api.getRecentlyAddedAlbums(
-      address: address,
-      session: session,
-      limit: limit,
-    );
+    return (api: api, address: address, session: session);
   }
 
   void _emit(JellyfinConnectionState state) {

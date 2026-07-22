@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaze/jellyfin/http_jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_api.dart';
+import 'package:gaze/library/album_summary.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -176,6 +177,83 @@ void main() {
         ),
       );
 
+      api.close();
+    });
+
+    test('loads a sorted album page with its total count', () async {
+      final client = MockClient((request) async {
+        expect(request.url.queryParameters['SortBy'], 'SortName');
+        expect(request.url.queryParameters['StartIndex'], '24');
+        expect(request.url.queryParameters['Limit'], '24');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Id': 'album-id',
+                'Name': 'Real Album',
+                'AlbumArtist': 'Real Artist',
+                'ProductionYear': 2026,
+              },
+            ],
+            'TotalRecordCount': 49,
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final page = await api.getAlbums(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        sort: AlbumSort.title,
+        startIndex: 24,
+        limit: 24,
+      );
+
+      expect(page.totalCount, 49);
+      expect(page.albums.single.year, 2026);
+      api.close();
+    });
+
+    test('loads ordered tracks for an album', () async {
+      final client = MockClient((request) async {
+        expect(request.url.queryParameters['ParentId'], 'album-id');
+        expect(request.url.queryParameters['IncludeItemTypes'], 'Audio');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Id': 'track-id',
+                'Name': 'Real Track',
+                'Artists': ['Real Artist'],
+                'IndexNumber': 1,
+                'ParentIndexNumber': 1,
+                'RunTimeTicks': 1920000000,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final tracks = await api.getAlbumTracks(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        albumId: 'album-id',
+      );
+
+      expect(tracks.single.title, 'Real Track');
+      expect(tracks.single.artist, 'Real Artist');
+      expect(tracks.single.duration, const Duration(minutes: 3, seconds: 12));
       api.close();
     });
 

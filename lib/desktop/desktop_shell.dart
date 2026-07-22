@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
+import 'albums_page.dart';
+
+enum _LibraryDestination { home, albums }
 
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
@@ -27,6 +30,7 @@ class _DesktopShellState extends State<DesktopShell> {
   bool _loading = false;
   String? _error;
   StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
+  _LibraryDestination _destination = _LibraryDestination.home;
 
   bool get _connected => widget.connectionController.state.isConnected;
 
@@ -99,19 +103,28 @@ class _DesktopShellState extends State<DesktopShell> {
                   children: [
                     _Navigation(
                       compact: compactNavigation,
+                      destination: _destination,
+                      onDestinationChanged: (destination) =>
+                          setState(() => _destination = destination),
                       onOpenJellyfinConnection: widget.onOpenJellyfinConnection,
                       onOpenPlaybackTest: widget.onOpenPlaybackTest,
                     ),
                     const VerticalDivider(width: 1, thickness: 1),
                     Expanded(
-                      child: _HomeContent(
-                        connected: _connected,
-                        loading: _loading,
-                        albums: _albums,
-                        error: _error,
-                        onConnect: widget.onOpenJellyfinConnection,
-                        onRetry: _loadAlbums,
-                      ),
+                      child: switch (_destination) {
+                        _LibraryDestination.home => _HomeContent(
+                          connected: _connected,
+                          loading: _loading,
+                          albums: _albums,
+                          error: _error,
+                          onConnect: widget.onOpenJellyfinConnection,
+                          onRetry: _loadAlbums,
+                        ),
+                        _LibraryDestination.albums => AlbumsPage(
+                          connectionController: widget.connectionController,
+                          onConnect: widget.onOpenJellyfinConnection,
+                        ),
+                      },
                     ),
                   ],
                 ),
@@ -128,11 +141,15 @@ class _DesktopShellState extends State<DesktopShell> {
 class _Navigation extends StatelessWidget {
   const _Navigation({
     required this.compact,
+    required this.destination,
+    required this.onDestinationChanged,
     required this.onOpenJellyfinConnection,
     required this.onOpenPlaybackTest,
   });
 
   final bool compact;
+  final _LibraryDestination destination;
+  final ValueChanged<_LibraryDestination> onDestinationChanged;
   final VoidCallback onOpenJellyfinConnection;
   final VoidCallback onOpenPlaybackTest;
 
@@ -167,12 +184,15 @@ class _Navigation extends StatelessWidget {
                 icon: Icons.home_rounded,
                 label: 'Home',
                 compact: compact,
-                selected: true,
+                selected: destination == _LibraryDestination.home,
+                onTap: () => onDestinationChanged(_LibraryDestination.home),
               ),
               _NavigationItem(
                 icon: Icons.album_outlined,
                 label: 'Albums',
                 compact: compact,
+                selected: destination == _LibraryDestination.albums,
+                onTap: () => onDestinationChanged(_LibraryDestination.albums),
               ),
               _NavigationItem(
                 icon: Icons.people_outline_rounded,
@@ -233,6 +253,7 @@ class _NavigationItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.compact,
+    this.onTap,
     this.selected = false,
   });
 
@@ -240,6 +261,7 @@ class _NavigationItem extends StatelessWidget {
   final String label;
   final bool compact;
   final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -251,12 +273,13 @@ class _NavigationItem extends StatelessWidget {
       child: Semantics(
         selected: selected,
         button: true,
+        enabled: onTap != null,
         label: label,
         child: Material(
           color: selected ? GazeColors.surfaceRaised : Colors.transparent,
           borderRadius: BorderRadius.circular(GazeRadii.control),
           child: InkWell(
-            onTap: () {},
+            onTap: onTap,
             borderRadius: BorderRadius.circular(GazeRadii.control),
             child: SizedBox(
               height: 48,

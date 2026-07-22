@@ -3,6 +3,7 @@ import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
+import 'package:gaze/library/track_summary.dart';
 
 void main() {
   test('connects and saves only the returned access token', () async {
@@ -92,6 +93,7 @@ void main() {
 
 class MemoryCredentialStore implements JellyfinCredentialStore {
   SavedJellyfinConnection? connection;
+  SavedJellyfinProfile? profile;
 
   String? get accessToken => connection?.accessToken;
 
@@ -105,13 +107,36 @@ class MemoryCredentialStore implements JellyfinCredentialStore {
   Future<SavedJellyfinConnection?> readConnection() async => connection;
 
   @override
+  Future<SavedJellyfinProfile?> readProfile() async => profile;
+
+  @override
   Future<void> writeConnection(SavedJellyfinConnection value) async =>
       connection = value;
+
+  @override
+  Future<void> writeProfile(SavedJellyfinProfile value) async =>
+      profile = value;
 }
 
 class RecordingJellyfinApi implements JellyfinApi {
   String? receivedPassword;
   bool validatedSession = false;
+
+  @override
+  Future<AlbumPage> getAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required AlbumSort sort,
+    required int startIndex,
+    required int limit,
+  }) async => const AlbumPage(albums: [], totalCount: 0);
+
+  @override
+  Future<List<TrackSummary>> getAlbumTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String albumId,
+  }) async => const [];
 
   @override
   Future<List<AlbumSummary>> getRecentlyAddedAlbums({
@@ -156,6 +181,22 @@ class RecordingJellyfinApi implements JellyfinApi {
 }
 
 class FailingJellyfinApi implements JellyfinApi {
+  @override
+  Future<AlbumPage> getAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required AlbumSort sort,
+    required int startIndex,
+    required int limit,
+  }) async => const AlbumPage(albums: [], totalCount: 0);
+
+  @override
+  Future<List<TrackSummary>> getAlbumTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String albumId,
+  }) async => const [];
+
   @override
   Future<List<AlbumSummary>> getRecentlyAddedAlbums({
     required JellyfinServerAddress address,

@@ -14,11 +14,12 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete:** generated Linux, Windows, and macOS runners; Windows and macOS validation remains pending on their respective operating systems.
 - **Complete:** Linux playback foundation selection and local media controls using media-kit.
 - **Complete for initial direction:** Phase 2's first desktop shell received manual visual approval; deeper UI work is paused until real library data is available.
-- **Active:** a narrow Phase 3/4 vertical slice containing the platform-neutral connection models, Jellyfin transport, authentication boundary, OS-backed token storage, and a temporary connection screen.
+- **Complete on Linux:** platform-neutral connection models, Jellyfin transport, OS-backed token storage, authentication, session restoration, and the first real Home library slice.
 - **Complete:** secure token persistence and real-server authentication manually verified on Linux.
 - **Complete:** the first read-only Jellyfin music-library slice displays real recently added albums and authenticated artwork on Home and received manual visual approval on Linux.
 - **Complete on Linux:** saved-session restoration validates the stored token and automatically reloads Home after restart; the user manually verified the restart sequence.
-- **Active:** make Albums the first functional library destination, then connect album selection to a read-only track listing before playback wiring.
+- **Complete on Linux:** Albums navigation, server-side sorting, automatic bounded pagination, and read-only album track listings passed real-library visual and interaction review. Login persistence was hardened after real keyring feedback, and the non-secret server/username profile remains available for reconnection.
+- **Active:** generate authenticated Jellyfin audio sources, connect track selection to the verified playback boundary, and replace the nonfunctional player placeholder with current-track controls.
 - **Then:** Phase 5, authenticated Jellyfin streaming through the verified playback boundary.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
@@ -96,6 +97,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 - Store the access token through an OS credential-store adapter; keep the non-secret server configuration separately.
 - Create sanitized response fixtures containing no personal server, account, or library information.
 - Add connection setup and one read-only library slice first, preferably recently added albums. Add broader album, artist, and search capabilities only in later focused tasks.
+- Expand Albums as the first complete read-only browse workflow: load bounded pages, sort on the server, and request tracks only when an album is opened.
 - Handle unreachable servers, expired sessions, malformed responses, empty libraries, and cancellation.
 - After browsing and playback are stable, add a separate library-maintenance phase for safe playlist management and metadata correction. Preview changes, distinguish deleting a Jellyfin playlist from deleting media files, and require explicit confirmation for destructive operations.
 
@@ -133,6 +135,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 - Choose and migrate a local SQLite schema for queue, playback position, preferences, and indexed metadata.
 - Persist queue edits atomically and restore conservatively after an unclean exit.
 - Add bounded artwork disk caching with size variants, validation, eviction, and cleanup.
+- Cache metadata and future synchronized lyrics with server-scoped keys, refresh markers, schema migrations, and explicit size/age policies. A cache must accelerate Jellyfin, never become the only copy of user data.
 - Define offline and stale-data behavior; do not imply that uncached tracks are playable offline.
 
 **Exit check:** migration, restart, corrupt-state, eviction, and cache-key tests pass.

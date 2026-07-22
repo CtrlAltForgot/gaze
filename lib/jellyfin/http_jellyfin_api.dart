@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../library/album_summary.dart';
+import '../library/track_summary.dart';
 import 'jellyfin_api.dart';
 
 class HttpJellyfinApi implements JellyfinApi {
@@ -85,19 +86,44 @@ class HttpJellyfinApi implements JellyfinApi {
     required JellyfinSession session,
     int limit = 10,
   }) async {
-    if (limit < 1) {
-      throw ArgumentError.value(limit, 'limit', 'must be positive');
+    final page = await getAlbums(
+      address: address,
+      session: session,
+      sort: AlbumSort.recentlyAdded,
+      startIndex: 0,
+      limit: limit,
+    );
+    return page.albums;
+  }
+
+  @override
+  Future<AlbumPage> getAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required AlbumSort sort,
+    required int startIndex,
+    required int limit,
+  }) async {
+    if (startIndex < 0 || limit < 1) {
+      throw ArgumentError('Album page bounds are invalid.');
     }
+    final (sortBy, sortOrder) = switch (sort) {
+      AlbumSort.recentlyAdded => ('DateCreated', 'Descending'),
+      AlbumSort.title => ('SortName', 'Ascending'),
+      AlbumSort.artist => ('AlbumArtist,SortName', 'Ascending'),
+      AlbumSort.releaseYear => ('ProductionYear,SortName', 'Descending'),
+    };
     final uri = address
         .endpoint('/Users/${session.userId}/Items')
         .replace(
           queryParameters: {
             'IncludeItemTypes': 'MusicAlbum',
             'Recursive': 'true',
-            'SortBy': 'DateCreated',
-            'SortOrder': 'Descending',
+            'SortBy': sortBy,
+            'SortOrder': sortOrder,
+            'StartIndex': '$startIndex',
             'Limit': '$limit',
-            'Fields': 'AlbumArtist,DateCreated',
+            'Fields': 'AlbumArtist,DateCreated,ProductionYear',
             'ImageTypeLimit': '1',
             'EnableImageTypes': 'Primary',
           },
@@ -136,11 +162,66 @@ class HttpJellyfinApi implements JellyfinApi {
           id: id,
           title: title,
           artist: artist,
+          year: value['ProductionYear'] is int
+              ? value['ProductionYear'] as int
+              : null,
           artworkBytes: artwork,
         ),
       );
     }
-    return albums;
+    final total = json['TotalRecordCount'];
+    return AlbumPage(
+      albums: albums,
+      totalCount: total is int ? total : startIndex + albums.length,
+    );
+  }
+
+  @override
+  Future<List<TrackSummary>> getAlbumTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String albumId,
+  }) async {
+    final uri = address
+        .endpoint('/Users/${session.userId}/Items')
+        .replace(
+          queryParameters: {
+            'ParentId': albumId,
+            'IncludeItemTypes': 'Audio',
+            'Recursive': 'true',
+            'SortBy': 'ParentIndexNumber,IndexNumber,SortName',
+            'SortOrder': 'Ascending',
+            'Fields': 'Artists,RunTimeTicks',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'load album tracks');
+    final values = _decodeObject(response.body)['Items'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an incomplete track list.',
+      );
+    }
+    return values
+        .whereType<Map<String, dynamic>>()
+        .map((value) {
+          final ticks = value['RunTimeTicks'];
+          return TrackSummary(
+            id: _requiredString(value, 'Id'),
+            title: _requiredString(value, 'Name'),
+            artist: _trackArtist(value),
+            duration: Duration(microseconds: ticks is int ? ticks ~/ 10 : 0),
+            trackNumber: value['IndexNumber'] is int
+                ? value['IndexNumber'] as int
+                : null,
+            discNumber: value['ParentIndexNumber'] is int
+                ? value['ParentIndexNumber'] as int
+                : null,
+          );
+        })
+        .toList(growable: false);
   }
 
   @override
@@ -178,6 +259,19 @@ class HttpJellyfinApi implements JellyfinApi {
       final first = artists.first;
       if (first is Map && first['Name'] is String) {
         return first['Name'] as String;
+      }
+    }
+    return 'Unknown artist';
+  }
+
+  String _trackArtist(Map<String, dynamic> item) {
+    final artists = item['Artists'];
+    if (artists is List) {
+      final names = artists.whereType<String>().where(
+        (name) => name.isNotEmpty,
+      );
+      if (names.isNotEmpty) {
+        return names.join(', ');
       }
     }
     return 'Unknown artist';

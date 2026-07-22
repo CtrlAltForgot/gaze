@@ -29,12 +29,22 @@ void main() {
 
     expect(await store.readConnection(), isNull);
     await store.writeConnection(connection);
+    await store.writeProfile(
+      const SavedJellyfinProfile(
+        serverAddress: 'http://music.local:8096',
+        userName: 'listener',
+      ),
+    );
     final restored = await store.readConnection();
     expect(restored?.serverAddress, connection.serverAddress);
     expect(restored?.accessToken, connection.accessToken);
     expect(restored?.userId, connection.userId);
     expect(restored?.userName, connection.userName);
+    final profile = await store.readProfile();
+    expect(profile?.serverAddress, connection.serverAddress);
+    expect(profile?.userName, connection.userName);
     await store.deleteConnection();
     expect(await store.readConnection(), isNull);
+    expect((await store.readProfile())?.userName, 'listener');
   });
 }

@@ -11,6 +11,7 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
   }) : _storage = storage;
 
   static const _connectionKey = 'gaze.jellyfin.connection';
+  static const _profileKey = 'gaze.jellyfin.profile';
   static const _legacyAccessTokenKey = 'gaze.jellyfin.access_token';
   static const _deviceIdKey = 'gaze.installation.device_id';
 
@@ -69,6 +70,34 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
   }
 
   @override
+  Future<SavedJellyfinProfile?> readProfile() async {
+    final encoded = await _storage.read(key: _profileKey);
+    if (encoded == null || encoded.isEmpty) {
+      final connection = await readConnection();
+      return connection == null
+          ? null
+          : SavedJellyfinProfile(
+              serverAddress: connection.serverAddress,
+              userName: connection.userName,
+            );
+    }
+    try {
+      final value = jsonDecode(encoded);
+      if (value is! Map<String, dynamic> ||
+          value['serverAddress'] is! String ||
+          value['userName'] is! String) {
+        return null;
+      }
+      return SavedJellyfinProfile(
+        serverAddress: value['serverAddress'] as String,
+        userName: value['userName'] as String,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  @override
   Future<void> writeConnection(SavedJellyfinConnection connection) async {
     await _storage.write(
       key: _connectionKey,
@@ -79,12 +108,29 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
         'userName': connection.userName,
       }),
     );
-    await _storage.delete(key: _legacyAccessTokenKey);
+    try {
+      await _storage.delete(key: _legacyAccessTokenKey);
+    } on Exception {
+      // The new session is already saved. Legacy cleanup must not reject login.
+    }
   }
+
+  @override
+  Future<void> writeProfile(SavedJellyfinProfile profile) => _storage.write(
+    key: _profileKey,
+    value: jsonEncode({
+      'serverAddress': profile.serverAddress,
+      'userName': profile.userName,
+    }),
+  );
 
   @override
   Future<void> deleteConnection() async {
     await _storage.delete(key: _connectionKey);
-    await _storage.delete(key: _legacyAccessTokenKey);
+    try {
+      await _storage.delete(key: _legacyAccessTokenKey);
+    } on Exception {
+      // Best-effort cleanup for the pre-profile token format.
+    }
   }
 }

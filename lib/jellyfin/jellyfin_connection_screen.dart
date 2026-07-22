@@ -29,6 +29,26 @@ class _JellyfinConnectionScreenState extends State<JellyfinConnectionScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _prefillSavedProfile();
+  }
+
+  Future<void> _prefillSavedProfile() async {
+    final profile = await widget.controller.loadSavedProfile();
+    if (!mounted || profile == null) {
+      return;
+    }
+    if (_serverController.text.isEmpty) {
+      _serverController.text = profile.serverAddress;
+    }
+    if (_userNameController.text.isEmpty) {
+      _userNameController.text = profile.userName;
+    }
+    setState(() {});
+  }
+
+  @override
   void dispose() {
     _serverController.dispose();
     _userNameController.dispose();

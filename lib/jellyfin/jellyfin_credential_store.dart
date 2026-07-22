@@ -12,12 +12,26 @@ class SavedJellyfinConnection {
   final String userName;
 }
 
+class SavedJellyfinProfile {
+  const SavedJellyfinProfile({
+    required this.serverAddress,
+    required this.userName,
+  });
+
+  final String serverAddress;
+  final String userName;
+}
+
 abstract interface class JellyfinCredentialStore {
   Future<String> getOrCreateDeviceId();
 
   Future<SavedJellyfinConnection?> readConnection();
 
+  Future<SavedJellyfinProfile?> readProfile();
+
   Future<void> writeConnection(SavedJellyfinConnection connection);
+
+  Future<void> writeProfile(SavedJellyfinProfile profile);
 
   Future<void> deleteConnection();
 }
