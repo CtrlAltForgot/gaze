@@ -15,6 +15,7 @@ import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
 import '../storage/artwork_palette_cache.dart';
 import 'albums_page.dart';
+import 'smooth_scroll_controller.dart';
 
 enum _LibraryDestination { home, albums }
 
@@ -58,6 +59,7 @@ class _DesktopShellState extends State<DesktopShell> {
   String? _searchError;
   int _searchRequest = 0;
   bool _lyricsVisible = false;
+  final SmoothScrollController _homeScrollController = SmoothScrollController();
 
   bool get _connected => widget.connectionController.state.canBrowseLibrary;
 
@@ -100,6 +102,7 @@ class _DesktopShellState extends State<DesktopShell> {
     unawaited(_connectionSubscription?.cancel());
     unawaited(_playbackSubscription?.cancel());
     _searchDebounce?.cancel();
+    _homeScrollController.dispose();
     super.dispose();
   }
 
@@ -265,6 +268,9 @@ class _DesktopShellState extends State<DesktopShell> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    _homeScrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
+      context,
+    );
     return Theme(
       data: theme.copyWith(
         colorScheme: theme.colorScheme.copyWith(primary: _palette.accent),
@@ -352,6 +358,7 @@ class _DesktopShellState extends State<DesktopShell> {
                                       searchError: _searchError,
                                       onSearchChanged: _handleSearchChanged,
                                       onPlaySearchTrack: _playSearchTrack,
+                                      scrollController: _homeScrollController,
                                     ),
                                     _LibraryDestination.albums => AlbumsPage(
                                       connectionController:
@@ -742,6 +749,7 @@ class _HomeContent extends StatelessWidget {
     required this.searchError,
     required this.onSearchChanged,
     required this.onPlaySearchTrack,
+    required this.scrollController,
   });
 
   final bool connected;
@@ -758,10 +766,12 @@ class _HomeContent extends StatelessWidget {
   final String? searchError;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<TrackSearchResult> onPlaySearchTrack;
+  final ScrollController scrollController;
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
+      controller: scrollController,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(

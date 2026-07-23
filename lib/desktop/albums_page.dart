@@ -4,6 +4,7 @@ import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
 import '../library/track_summary.dart';
+import 'smooth_scroll_controller.dart';
 
 class AlbumsPage extends StatefulWidget {
   const AlbumsPage({
@@ -37,7 +38,7 @@ class _AlbumsPageState extends State<AlbumsPage> {
   static const _loadAheadDistance = 700.0;
 
   final List<AlbumSummary> _albums = [];
-  final ScrollController _scrollController = ScrollController();
+  final SmoothScrollController _scrollController = SmoothScrollController();
   AlbumSort _sort = AlbumSort.title;
   bool _loading = false;
   bool _loadingMore = false;
@@ -167,6 +168,9 @@ class _AlbumsPageState extends State<AlbumsPage> {
 
   @override
   Widget build(BuildContext context) {
+    _scrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
+      context,
+    );
     final album = _selectedAlbum;
     if (album != null) {
       return _AlbumDetail(
@@ -427,11 +431,18 @@ class _AlbumDetail extends StatefulWidget {
 class _AlbumDetailState extends State<_AlbumDetail> {
   List<TrackSummary>? _tracks;
   String? _error;
+  final SmoothScrollController _scrollController = SmoothScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadTracks();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadTracks() async {
@@ -452,7 +463,11 @@ class _AlbumDetailState extends State<_AlbumDetail> {
 
   @override
   Widget build(BuildContext context) {
+    _scrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
+      context,
+    );
     return CustomScrollView(
+      controller: _scrollController,
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.all(GazeSpacing.xLarge),
