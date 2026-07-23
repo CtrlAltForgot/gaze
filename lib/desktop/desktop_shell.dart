@@ -11,6 +11,7 @@ import '../library/album_summary.dart';
 import '../library/track_summary.dart';
 import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
+import '../storage/artwork_palette_cache.dart';
 import 'albums_page.dart';
 
 enum _LibraryDestination { home, albums }
@@ -22,6 +23,7 @@ class DesktopShell extends StatefulWidget {
     required this.queueController,
     required this.onOpenJellyfinConnection,
     required this.onOpenPlaybackTest,
+    this.paletteCache = const DisabledArtworkPaletteCache(),
     super.key,
   });
 
@@ -30,6 +32,7 @@ class DesktopShell extends StatefulWidget {
   final PlaybackQueueController queueController;
   final VoidCallback onOpenJellyfinConnection;
   final VoidCallback onOpenPlaybackTest;
+  final ArtworkPaletteCache paletteCache;
 
   @override
   State<DesktopShell> createState() => _DesktopShellState();
@@ -90,9 +93,39 @@ class _DesktopShellState extends State<DesktopShell> {
       return;
     }
     _paletteArtwork = artwork;
-    final palette = await extractArtworkPalette(artwork);
+    final fingerprint = fingerprintArtwork(artwork);
+    ArtworkPalette? palette;
+    try {
+      final stored = await widget.paletteCache.read(fingerprint);
+      if (stored != null) {
+        palette = ArtworkPalette(
+          accent: Color(stored.accentArgb),
+          background: stored.backgroundArgb
+              .map(Color.new)
+              .toList(growable: false),
+        );
+      }
+    } catch (_) {
+      // Palette persistence is an optimization, never a playback dependency.
+    }
+    final resolvedPalette = palette ?? await extractArtworkPalette(artwork);
+    if (palette == null) {
+      try {
+        await widget.paletteCache.write(
+          fingerprint,
+          StoredArtworkPalette(
+            accentArgb: resolvedPalette.accent.toARGB32(),
+            backgroundArgb: resolvedPalette.background
+                .map((color) => color.toARGB32())
+                .toList(growable: false),
+          ),
+        );
+      } catch (_) {
+        // A calculated palette remains usable when persistence fails.
+      }
+    }
     if (mounted && identical(artwork, _paletteArtwork)) {
-      setState(() => _palette = palette);
+      setState(() => _palette = resolvedPalette);
     }
   }
 

@@ -19,9 +19,11 @@ import 'playback/playback_test_screen.dart';
 import 'playback/playback_queue_controller.dart';
 import 'storage/playback_state_store.dart';
 import 'storage/artwork_cache.dart';
+import 'storage/artwork_palette_cache.dart';
 import 'storage/file_artwork_cache.dart';
 import 'storage/library_metadata_cache.dart';
 import 'storage/sqlite_library_metadata_cache.dart';
+import 'storage/sqlite_artwork_palette_cache.dart';
 import 'storage/sqlite_playback_state_store.dart';
 
 Future<void> main() async {
@@ -30,6 +32,7 @@ Future<void> main() async {
   PlaybackStateStore playbackStateStore;
   ArtworkCache artworkCache;
   LibraryMetadataCache metadataCache;
+  ArtworkPaletteCache paletteCache;
   try {
     playbackStateStore = await SqlitePlaybackStateStore.open();
   } catch (_) {
@@ -44,6 +47,11 @@ Future<void> main() async {
     metadataCache = await SqliteLibraryMetadataCache.open();
   } catch (_) {
     metadataCache = const DisabledLibraryMetadataCache();
+  }
+  try {
+    paletteCache = await SqliteArtworkPaletteCache.open();
+  } catch (_) {
+    paletteCache = const DisabledArtworkPaletteCache();
   }
   final credentialStore = const FlutterSecureJellyfinCredentialStore();
   final connectionController = JellyfinConnectionController(
@@ -61,6 +69,7 @@ Future<void> main() async {
       playbackController: MediaKitPlaybackController(),
       connectionController: connectionController,
       playbackStateStore: playbackStateStore,
+      paletteCache: paletteCache,
     ),
   );
   unawaited(connectionController.restore());
@@ -71,12 +80,14 @@ class GazeApp extends StatefulWidget {
     required this.playbackController,
     required this.connectionController,
     this.playbackStateStore = const DisabledPlaybackStateStore(),
+    this.paletteCache = const DisabledArtworkPaletteCache(),
     super.key,
   });
 
   final PlaybackController playbackController;
   final JellyfinConnectionController connectionController;
   final PlaybackStateStore playbackStateStore;
+  final ArtworkPaletteCache paletteCache;
 
   @override
   State<GazeApp> createState() => _GazeAppState();
@@ -136,6 +147,7 @@ class _GazeAppState extends State<GazeApp> {
           connectionController: widget.connectionController,
           playbackController: widget.playbackController,
           queueController: _queueController,
+          paletteCache: widget.paletteCache,
           onOpenJellyfinConnection: () =>
               setState(() => _screen = _DevelopmentScreen.jellyfinConnection),
           onOpenPlaybackTest: () =>
