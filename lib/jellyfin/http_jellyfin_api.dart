@@ -6,12 +6,14 @@ import 'package:http/http.dart' as http;
 
 import '../library/album_summary.dart';
 import '../library/track_summary.dart';
+import '../storage/artwork_cache.dart';
 import 'jellyfin_api.dart';
 
 class HttpJellyfinApi implements JellyfinApi {
   HttpJellyfinApi({
     required http.Client client,
     required JellyfinClientIdentity identity,
+    this.artworkCache = const DisabledArtworkCache(),
     this.requestTimeout = const Duration(seconds: 12),
   }) : _client = client,
        _identity = identity {
@@ -20,6 +22,7 @@ class HttpJellyfinApi implements JellyfinApi {
 
   final http.Client _client;
   final JellyfinClientIdentity _identity;
+  final ArtworkCache artworkCache;
   final Duration requestTimeout;
 
   @override
@@ -206,11 +209,10 @@ class HttpJellyfinApi implements JellyfinApi {
         continue;
       }
       final artist = _albumArtist(value);
-      final hasArtwork =
-          value['ImageTags'] is Map &&
-          (value['ImageTags'] as Map).containsKey('Primary');
-      final artwork = hasArtwork
-          ? await _loadArtwork(address, session, id)
+      final imageTags = value['ImageTags'];
+      final imageTag = imageTags is Map ? imageTags['Primary'] : null;
+      final artwork = imageTag is String && imageTag.isNotEmpty
+          ? await _loadArtwork(address, session, id, imageTag)
           : null;
       albums.add(
         AlbumSummary(
@@ -336,7 +338,23 @@ class HttpJellyfinApi implements JellyfinApi {
     JellyfinServerAddress address,
     JellyfinSession session,
     String itemId,
+    String imageTag,
   ) async {
+    final key = ArtworkCacheKey(
+      server: address.toString(),
+      itemId: itemId,
+      imageTag: imageTag,
+      maxWidth: 600,
+    );
+    Uint8List? cached;
+    try {
+      cached = await artworkCache.read(key);
+    } catch (_) {
+      // A cache failure must never prevent authenticated artwork loading.
+    }
+    if (cached != null) {
+      return cached;
+    }
     try {
       final uri = address
           .endpoint('/Items/$itemId/Images/Primary')
@@ -345,6 +363,11 @@ class HttpJellyfinApi implements JellyfinApi {
         () => _client.get(uri, headers: _authenticatedHeaders(session)),
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        try {
+          await artworkCache.write(key, response.bodyBytes);
+        } catch (_) {
+          // The network result remains usable when local persistence fails.
+        }
         return response.bodyBytes;
       }
     } on JellyfinConnectionException {

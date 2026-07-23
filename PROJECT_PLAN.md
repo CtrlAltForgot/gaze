@@ -135,7 +135,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** resume reliably and stay responsive with a larger library.
 
-**Current status:** the first persistence slice uses `sqlite3` 3.x with bundled native SQLite and Flutter's official `path_provider`. Queue items, current index, position, and volume are replaced atomically in a versioned database. Snapshots are scoped to the Jellyfin server and user, contain item IDs and ordinary display metadata only, and never store access tokens, authorization headers, or private stream URLs. After the saved Jellyfin session reconnects, gaze regenerates authenticated sources and restores the current track paused at its last recent position. Automated migration, round-trip, replacement, clearing, and no-autoplay restoration checks pass; Linux restart behavior still requires manual validation.
+**Current status:** queue and playback restoration use a versioned SQLite database. A separate versioned artwork directory now caches authenticated Jellyfin images under server, item, image-tag, and size keys. It is bounded to 256 MiB and 2,000 entries with least-recently-used eviction; changed Jellyfin image tags bypass stale entries, and damaged or unavailable cache data falls back to the network. Neither persistence layer stores access tokens, authorization headers, or private stream URLs. Metadata, derived-palette, and future lyrics caching remain later slices.
 
 - Choose and migrate a local SQLite schema for queue, playback position, preferences, and indexed metadata.
 - Persist queue edits atomically and restore conservatively after an unclean exit.
