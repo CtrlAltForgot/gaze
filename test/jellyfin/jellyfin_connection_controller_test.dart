@@ -4,6 +4,7 @@ import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
 import 'package:gaze/library/library_search_results.dart';
+import 'package:gaze/library/track_lyrics.dart';
 import 'package:gaze/library/track_summary.dart';
 import 'package:gaze/storage/library_metadata_cache.dart';
 import 'package:gaze/storage/sqlite_library_metadata_cache.dart';
@@ -237,6 +238,13 @@ class RecordingJellyfinApi implements JellyfinApi {
   }) async => const [];
 
   @override
+  Future<TrackLyrics?> getLyrics({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String trackId,
+  }) async => null;
+
+  @override
   Future<LibrarySearchResults> searchLibrary({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -330,6 +338,13 @@ class FailingJellyfinApi implements JellyfinApi {
     required JellyfinSession session,
     required String albumId,
   }) async => const [];
+
+  @override
+  Future<TrackLyrics?> getLyrics({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String trackId,
+  }) async => throw error;
 
   @override
   Future<LibrarySearchResults> searchLibrary({

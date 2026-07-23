@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../library/album_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../storage/artwork_cache.dart';
 import 'jellyfin_api.dart';
@@ -376,6 +377,56 @@ class HttpJellyfinApi implements JellyfinApi {
       }
     }
     return LibrarySearchResults(albums: albums, tracks: tracks);
+  }
+
+  @override
+  Future<TrackLyrics?> getLyrics({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String trackId,
+  }) async {
+    if (trackId.isEmpty || trackId.contains('/')) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an invalid track identifier.',
+      );
+    }
+    final response = await _request(
+      () => _client.get(
+        address.endpoint('/Audio/$trackId/Lyrics'),
+        headers: _authenticatedHeaders(session),
+      ),
+    );
+    if (response.statusCode == 404) {
+      return null;
+    }
+    _requireSuccess(response, operation: 'load lyrics from Jellyfin');
+    final json = _decodeObject(response.body);
+    final metadata = json['Metadata'];
+    final values = json['Lyrics'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned incomplete lyrics.',
+      );
+    }
+    final lines = <LyricLine>[];
+    for (final value in values.whereType<Map<String, dynamic>>()) {
+      final text = value['Text'];
+      if (text is! String) {
+        continue;
+      }
+      final start = value['Start'];
+      lines.add(
+        LyricLine(
+          text: text,
+          start: start is int ? Duration(microseconds: start ~/ 10) : null,
+        ),
+      );
+    }
+    return TrackLyrics(
+      lines: List.unmodifiable(lines),
+      isSynchronized:
+          metadata is Map<String, dynamic> && metadata['IsSynced'] == true,
+    );
   }
 
   String? _primaryImageTag(Map<String, dynamic> item) {

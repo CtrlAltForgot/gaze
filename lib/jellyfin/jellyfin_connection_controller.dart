@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../library/album_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../storage/artwork_cache.dart';
 import '../storage/library_metadata_cache.dart';
@@ -422,6 +423,11 @@ class JellyfinConnectionController {
       query: query,
       limit: limit,
     );
+  }
+
+  Future<TrackLyrics?> loadLyrics(String trackId) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.getLyrics(address: address, session: session, trackId: trackId);
   }
 
   JellyfinAudioStreamSource createDirectPlaySource(String trackId) {

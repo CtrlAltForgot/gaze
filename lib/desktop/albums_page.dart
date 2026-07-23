@@ -304,13 +304,6 @@ class _AlbumsPageState extends State<AlbumsPage> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 1160
-            ? 6
-            : constraints.maxWidth >= 880
-            ? 5
-            : constraints.maxWidth >= 600
-            ? 4
-            : 2;
         return CustomScrollView(
           controller: _scrollController,
           slivers: [
@@ -323,8 +316,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
               ),
               sliver: SliverGrid.builder(
                 itemCount: _albums.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: columns,
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 230,
                   crossAxisSpacing: GazeSpacing.large,
                   mainAxisSpacing: GazeSpacing.xLarge,
                   childAspectRatio: 0.76,

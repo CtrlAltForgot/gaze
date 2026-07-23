@@ -149,6 +149,12 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** expand complete desktop workflows without losing consistency.
 
+**Lyrics architecture:** Jellyfin remains the authority for embedded, sidecar,
+or provider-downloaded lyrics and exposes per-track timed or untimed lines. A
+future gaze companion service will maintain a server-side full-text index of
+that Jellyfin-held text so every gaze device can search remembered phrases
+without independently downloading or indexing the library.
+
 - Add album, artist, track, playlist, favorites, and search pages incrementally.
 - Add expandable Now Playing and an optional right queue panel.
 - Add drag-and-drop queue editing, context menus, keyboard shortcuts, and polished transitions.

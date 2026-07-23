@@ -9,6 +9,7 @@ import '../design/artwork_palette.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
@@ -56,6 +57,7 @@ class _DesktopShellState extends State<DesktopShell> {
   bool _searching = false;
   String? _searchError;
   int _searchRequest = 0;
+  bool _lyricsVisible = false;
 
   bool get _connected => widget.connectionController.state.canBrowseLibrary;
 
@@ -360,12 +362,36 @@ class _DesktopShellState extends State<DesktopShell> {
                                     ),
                                   },
                           ),
+                          if (_lyricsVisible) ...[
+                            VerticalDivider(
+                              width: 1,
+                              thickness: 1,
+                              color: Colors.white.withValues(alpha: .16),
+                            ),
+                            SizedBox(
+                              width: constraints.maxWidth >= 1700
+                                  ? 430
+                                  : constraints.maxWidth >= 1250
+                                  ? 360
+                                  : 320,
+                              child: _LyricsPanel(
+                                connectionController:
+                                    widget.connectionController,
+                                playbackController: widget.playbackController,
+                                onClose: () =>
+                                    setState(() => _lyricsVisible = false),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
                     _PlayerBar(
                       controller: widget.playbackController,
                       queueController: widget.queueController,
+                      lyricsVisible: _lyricsVisible,
+                      onToggleLyrics: () =>
+                          setState(() => _lyricsVisible = !_lyricsVisible),
                     ),
                   ],
                 );
@@ -745,26 +771,27 @@ class _HomeContent extends StatelessWidget {
             0,
           ),
           sliver: SliverToBoxAdapter(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Your music, brought forward.',
-                        style: Theme.of(context).textTheme.headlineLarge,
-                      ),
-                      const SizedBox(height: GazeSpacing.small),
-                      const Text(
-                        'A calm place for the albums you chose to keep.',
-                      ),
-                    ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final heading = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Your music, brought forward.',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: GazeSpacing.small),
+                    const Text(
+                      'A calm place for the albums you chose to keep.',
+                    ),
+                  ],
+                );
+                final search = ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth < 700
+                        ? constraints.maxWidth
+                        : 320,
                   ),
-                ),
-                const SizedBox(width: GazeSpacing.large),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 280),
                   child: TextFormField(
                     initialValue: searchQuery,
                     onChanged: onSearchChanged,
@@ -781,8 +808,25 @@ class _HomeContent extends StatelessWidget {
                       ),
                     ),
                   ),
-                ),
-              ],
+                );
+                if (constraints.maxWidth < 700) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      heading,
+                      const SizedBox(height: GazeSpacing.large),
+                      search,
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: heading),
+                    const SizedBox(width: GazeSpacing.large),
+                    search,
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -1033,18 +1077,10 @@ class _HomeContent extends StatelessWidget {
             ),
             sliver: SliverLayoutBuilder(
               builder: (context, constraints) {
-                final width = constraints.crossAxisExtent;
-                final columns = width >= 1160
-                    ? 5
-                    : width >= 880
-                    ? 4
-                    : width >= 600
-                    ? 3
-                    : 2;
                 return SliverGrid.builder(
                   itemCount: albums.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: columns,
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 270,
                     crossAxisSpacing: GazeSpacing.large,
                     mainAxisSpacing: GazeSpacing.xLarge,
                     childAspectRatio: 0.78,
@@ -1154,11 +1190,276 @@ class _AlbumCard extends StatelessWidget {
   }
 }
 
+class _LyricsPanel extends StatefulWidget {
+  const _LyricsPanel({
+    required this.connectionController,
+    required this.playbackController,
+    required this.onClose,
+  });
+
+  final JellyfinConnectionController connectionController;
+  final PlaybackController playbackController;
+  final VoidCallback onClose;
+
+  @override
+  State<_LyricsPanel> createState() => _LyricsPanelState();
+}
+
+class _LyricsPanelState extends State<_LyricsPanel> {
+  final ScrollController _scrollController = ScrollController();
+  StreamSubscription<PlaybackSnapshot>? _subscription;
+  PlaybackSnapshot _playback = const PlaybackSnapshot();
+  Future<TrackLyrics?>? _lyrics;
+  String? _itemId;
+  int _activeLine = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _playback = widget.playbackController.state;
+    _loadFor(_playback.itemId);
+    _subscription = widget.playbackController.states.listen(_handlePlayback);
+  }
+
+  @override
+  void dispose() {
+    unawaited(_subscription?.cancel());
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _loadFor(String? itemId) {
+    _itemId = itemId;
+    _activeLine = -1;
+    _lyrics = itemId == null
+        ? null
+        : widget.connectionController.loadLyrics(itemId);
+  }
+
+  void _handlePlayback(PlaybackSnapshot playback) {
+    if (!mounted) {
+      return;
+    }
+    if (playback.itemId != _itemId) {
+      setState(() {
+        _playback = playback;
+        _loadFor(playback.itemId);
+      });
+      return;
+    }
+    if (_playback.position != playback.position ||
+        _playback.title != playback.title ||
+        _playback.artist != playback.artist) {
+      setState(() => _playback = playback);
+    }
+  }
+
+  int _lineAt(TrackLyrics lyrics) {
+    if (!lyrics.isSynchronized) {
+      return -1;
+    }
+    var active = -1;
+    for (var index = 0; index < lyrics.lines.length; index++) {
+      final start = lyrics.lines[index].start;
+      if (start == null || start > _playback.position) {
+        break;
+      }
+      active = index;
+    }
+    if (active != _activeLine) {
+      _activeLine = active;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_scrollController.hasClients || active < 0) {
+          return;
+        }
+        final target = (active * 64.0 - 120).clamp(
+          0.0,
+          _scrollController.position.maxScrollExtent,
+        );
+        if (MediaQuery.disableAnimationsOf(context)) {
+          _scrollController.jumpTo(target);
+        } else {
+          _scrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      });
+    }
+    return active;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: GazeColors.navigation.withValues(alpha: .44),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.large,
+              GazeSpacing.large,
+              GazeSpacing.small,
+              GazeSpacing.medium,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Lyrics',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      const SizedBox(height: GazeSpacing.xSmall),
+                      Text(
+                        _playback.title ?? 'Nothing playing',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: widget.onClose,
+                  tooltip: 'Close lyrics',
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: Colors.white.withValues(alpha: .14)),
+          Expanded(child: _buildBody(context)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final future = _lyrics;
+    if (_itemId == null || future == null) {
+      return const _LyricsMessage(
+        icon: Icons.lyrics_outlined,
+        title: 'Choose a song',
+        message: 'Lyrics will appear here while a Jellyfin track is playing.',
+      );
+    }
+    return FutureBuilder<TrackLyrics?>(
+      future: future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return _LyricsMessage(
+            icon: Icons.error_outline_rounded,
+            title: 'Lyrics could not be loaded',
+            message: snapshot.error.toString(),
+          );
+        }
+        final lyrics = snapshot.data;
+        if (lyrics == null || lyrics.lines.isEmpty) {
+          return const _LyricsMessage(
+            icon: Icons.lyrics_outlined,
+            title: 'No lyrics available',
+            message: 'Jellyfin does not have lyrics saved for this song yet.',
+          );
+        }
+        final active = _lineAt(lyrics);
+        return ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(
+            horizontal: GazeSpacing.large,
+            vertical: GazeSpacing.xLarge,
+          ),
+          itemExtent: 64,
+          itemCount: lyrics.lines.length,
+          itemBuilder: (context, index) {
+            final line = lyrics.lines[index];
+            final selected = index == active;
+            return Semantics(
+              selected: selected,
+              button: line.start != null,
+              label: line.text,
+              child: InkWell(
+                onTap: line.start == null
+                    ? null
+                    : () => widget.playbackController.seek(line.start!),
+                borderRadius: BorderRadius.circular(GazeRadii.control),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedDefaultTextStyle(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    style: Theme.of(context).textTheme.titleMedium!.copyWith(
+                      color: selected
+                          ? GazeColors.textPrimary
+                          : GazeColors.textSecondary,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                    child: Text(
+                      line.text.isEmpty ? '♪' : line.text,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _LyricsMessage extends StatelessWidget {
+  const _LyricsMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(GazeSpacing.xLarge),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 36, color: GazeColors.textSecondary),
+            const SizedBox(height: GazeSpacing.medium),
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: GazeSpacing.small),
+            Text(message, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PlayerBar extends StatelessWidget {
-  const _PlayerBar({required this.controller, required this.queueController});
+  const _PlayerBar({
+    required this.controller,
+    required this.queueController,
+    required this.lyricsVisible,
+    required this.onToggleLyrics,
+  });
 
   final PlaybackController controller;
   final PlaybackQueueController queueController;
+  final bool lyricsVisible;
+  final VoidCallback onToggleLyrics;
 
   @override
   Widget build(BuildContext context) {
@@ -1177,126 +1478,177 @@ class _PlayerBar extends StatelessWidget {
           0,
           durationMs > 0 ? durationMs : 1,
         );
-        return Container(
-          height: 104,
-          padding: const EdgeInsets.symmetric(horizontal: GazeSpacing.large),
-          decoration: BoxDecoration(
-            color: GazeColors.navigation.withValues(alpha: .52),
-            border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: .16)),
-            ),
-          ),
-          child: Row(
-            children: [
-              _PlayerArtwork(playback: playback),
-              const SizedBox(width: GazeSpacing.medium),
-              SizedBox(
-                width: 220,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      playback.title ?? 'Nothing playing',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: GazeColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: GazeSpacing.xSmall),
-                    Text(
-                      playback.errorMessage != null
-                          ? playback.errorMessage!
-                          : playback.artist?.isNotEmpty == true
-                          ? playback.artist!
-                          : 'Choose a track from an album.',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 900;
+            final wide = constraints.maxWidth >= 1500;
+            final artworkSize = compact ? 60.0 : 76.0;
+            final metadataWidth = compact
+                ? 130.0
+                : wide
+                ? 240.0
+                : 180.0;
+            final timelineWidth = compact
+                ? 400.0
+                : wide
+                ? 760.0
+                : 560.0;
+            return Container(
+              height: 104,
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? GazeSpacing.small : GazeSpacing.large,
+              ),
+              decoration: BoxDecoration(
+                color: GazeColors.navigation.withValues(alpha: .52),
+                border: Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: .16)),
                 ),
               ),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Row(
+              child: Row(
+                children: [
+                  _PlayerArtwork(playback: playback, dimension: artworkSize),
+                  SizedBox(
+                    width: compact ? GazeSpacing.small : GazeSpacing.medium,
+                  ),
+                  SizedBox(
+                    width: metadataWidth,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          playback.title ?? 'Nothing playing',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: GazeColors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: GazeSpacing.xSmall),
+                        Text(
+                          playback.errorMessage != null
+                              ? playback.errorMessage!
+                              : playback.artist?.isNotEmpty == true
+                              ? playback.artist!
+                              : 'Choose a track from an album.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        IconButton(
-                          onPressed:
-                              queue.hasPrevious ||
-                                  (hasTrack &&
-                                      playback.position >
-                                          PlaybackQueueController
-                                              .previousRestartThreshold)
-                              ? queueController.previous
-                              : null,
-                          tooltip: 'Previous',
-                          iconSize: 30,
-                          icon: const Icon(Icons.skip_previous_rounded),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              onPressed:
+                                  queue.hasPrevious ||
+                                      (hasTrack &&
+                                          playback.position >
+                                              PlaybackQueueController
+                                                  .previousRestartThreshold)
+                                  ? queueController.previous
+                                  : null,
+                              tooltip: 'Previous',
+                              iconSize: 30,
+                              icon: const Icon(Icons.skip_previous_rounded),
+                            ),
+                            IconButton.filled(
+                              onPressed: hasTrack
+                                  ? playing
+                                        ? controller.pause
+                                        : controller.play
+                                  : null,
+                              tooltip: playing ? 'Pause' : 'Play',
+                              icon: Icon(
+                                playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: queue.hasNext
+                                  ? queueController.next
+                                  : null,
+                              tooltip: 'Next',
+                              iconSize: 30,
+                              icon: const Icon(Icons.skip_next_rounded),
+                            ),
+                          ],
                         ),
-                        IconButton.filled(
-                          onPressed: hasTrack
-                              ? playing
-                                    ? controller.pause
-                                    : controller.play
-                              : null,
-                          tooltip: playing ? 'Pause' : 'Play',
-                          icon: Icon(
-                            playing
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
+                        Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: timelineWidth,
+                            ),
+                            child: Row(
+                              children: [
+                                Text(_compactDuration(playback.position)),
+                                Expanded(
+                                  child: Slider(
+                                    value: positionMs.toDouble(),
+                                    max: durationMs > 0
+                                        ? durationMs.toDouble()
+                                        : 1,
+                                    onChanged: hasTrack && durationMs > 0
+                                        ? (value) => controller.seek(
+                                            Duration(
+                                              milliseconds: value.round(),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                Text(_compactDuration(playback.duration)),
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: queue.hasNext
-                              ? queueController.next
-                              : null,
-                          tooltip: 'Next',
-                          iconSize: 30,
-                          icon: const Icon(Icons.skip_next_rounded),
                         ),
                       ],
                     ),
-                    Row(
+                  ),
+                  SizedBox(
+                    width: compact
+                        ? 52
+                        : wide
+                        ? 200
+                        : 160,
+                    child: Row(
                       children: [
-                        Text(_compactDuration(playback.position)),
-                        Expanded(
-                          child: Slider(
-                            value: positionMs.toDouble(),
-                            max: durationMs > 0 ? durationMs.toDouble() : 1,
-                            onChanged: hasTrack && durationMs > 0
-                                ? (value) => controller.seek(
-                                    Duration(milliseconds: value.round()),
-                                  )
-                                : null,
+                        IconButton(
+                          onPressed: playback.itemId == null
+                              ? null
+                              : onToggleLyrics,
+                          tooltip: lyricsVisible
+                              ? 'Hide lyrics'
+                              : 'Show lyrics',
+                          icon: Icon(
+                            lyricsVisible
+                                ? Icons.lyrics_rounded
+                                : Icons.lyrics_outlined,
                           ),
                         ),
-                        Text(_compactDuration(playback.duration)),
+                        if (!compact) ...[
+                          const Icon(Icons.volume_up_rounded, size: 20),
+                          Expanded(
+                            child: Slider(
+                              value: playback.volume.clamp(0, 1),
+                              onChanged: controller.setVolume,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              SizedBox(
-                width: 150,
-                child: Row(
-                  children: [
-                    const Icon(Icons.volume_up_rounded, size: 20),
-                    Expanded(
-                      child: Slider(
-                        value: playback.volume.clamp(0, 1),
-                        onChanged: controller.setVolume,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
@@ -1304,14 +1656,15 @@ class _PlayerBar extends StatelessWidget {
 }
 
 class _PlayerArtwork extends StatelessWidget {
-  const _PlayerArtwork({required this.playback});
+  const _PlayerArtwork({required this.playback, required this.dimension});
 
   final PlaybackSnapshot playback;
+  final double dimension;
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 76,
-      height: 76,
+      width: dimension,
+      height: dimension,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: GazeColors.surfaceRaised,

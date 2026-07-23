@@ -375,6 +375,66 @@ void main() {
       api.close();
     });
 
+    test('loads synchronized lyrics without exposing the token', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/Audio/track-id/Lyrics');
+        expect(request.url.query, isNot(contains('private-access-token')));
+        expect(
+          request.headers['authorization'],
+          contains('Token="private-access-token"'),
+        );
+        return http.Response(
+          jsonEncode({
+            'Metadata': {'IsSynced': true},
+            'Lyrics': [
+              {'Text': 'First remembered line', 'Start': 108900000},
+              {'Text': 'Second remembered line', 'Start': 145800000},
+            ],
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final lyrics = await api.getLyrics(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        trackId: 'track-id',
+      );
+
+      expect(lyrics, isNotNull);
+      expect(lyrics!.isSynchronized, isTrue);
+      expect(lyrics.lines.first.text, 'First remembered line');
+      expect(
+        lyrics.lines.first.start,
+        const Duration(seconds: 10, milliseconds: 890),
+      );
+      api.close();
+    });
+
+    test('returns unavailable when Jellyfin has no lyrics', () async {
+      final api = _createApi(
+        MockClient((_) async => http.Response('not available', 404)),
+      );
+
+      final lyrics = await api.getLyrics(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        trackId: 'track-id',
+      );
+
+      expect(lyrics, isNull);
+      api.close();
+    });
+
     test('reports HTTP status without exposing a private response', () async {
       final client = MockClient(
         (_) async => http.Response('private server response', 401),

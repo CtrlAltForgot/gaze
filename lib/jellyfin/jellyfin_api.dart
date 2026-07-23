@@ -1,5 +1,6 @@
 import '../library/album_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 
 class JellyfinServerAddress {
@@ -127,6 +128,12 @@ abstract interface class JellyfinApi {
     required JellyfinSession session,
     required String query,
     int limit = 24,
+  });
+
+  Future<TrackLyrics?> getLyrics({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String trackId,
   });
 
   Future<void> validateSession({
