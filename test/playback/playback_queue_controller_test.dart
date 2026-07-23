@@ -23,11 +23,77 @@ void main() {
 
       await queue.previous();
       expect(playback.loadedTitles, ['Two', 'Three', 'Two']);
+      expect(playback.loadedStartPositions, [
+        Duration.zero,
+        Duration.zero,
+        Duration.zero,
+      ]);
 
       await queue.dispose();
       await playback.dispose();
     },
   );
+
+  test('previous restarts the current track after five seconds', () async {
+    final playback = QueueTestPlaybackController();
+    final queue = PlaybackQueueController(playbackController: playback);
+    await queue.playAlbum([_source('One'), _source('Two')], startIndex: 1);
+    playback.emitPosition(const Duration(seconds: 6));
+
+    await queue.previous();
+
+    expect(queue.state.currentIndex, 1);
+    expect(playback.loadedTitles, ['Two']);
+    expect(playback.seekPositions, [Duration.zero]);
+    await queue.dispose();
+    await playback.dispose();
+  });
+
+  test('previous changes tracks at exactly five seconds', () async {
+    final playback = QueueTestPlaybackController();
+    final queue = PlaybackQueueController(playbackController: playback);
+    await queue.playAlbum([_source('One'), _source('Two')], startIndex: 1);
+    playback.emitPosition(const Duration(seconds: 5));
+
+    await queue.previous();
+
+    expect(queue.state.currentIndex, 0);
+    expect(playback.loadedTitles, ['Two', 'One']);
+    expect(playback.seekPositions, isEmpty);
+    await queue.dispose();
+    await playback.dispose();
+  });
+
+  test('previous reopens a restored track from the beginning', () async {
+    final playback = QueueTestPlaybackController();
+    final queue = PlaybackQueueController(playbackController: playback);
+    await queue.restore(
+      [
+        RemotePlaybackSource(
+          uri: Uri.parse('https://music.example/One'),
+          title: 'One',
+          artist: 'Artist',
+          startPosition: const Duration(seconds: 42),
+        ),
+        _source('Two'),
+      ],
+      currentIndex: 0,
+      volume: 1,
+    );
+
+    await queue.next();
+    playback.emitPosition(Duration.zero);
+    await queue.previous();
+
+    expect(playback.loadedTitles, ['One', 'Two', 'One']);
+    expect(playback.loadedStartPositions, [
+      const Duration(seconds: 42),
+      Duration.zero,
+      Duration.zero,
+    ]);
+    await queue.dispose();
+    await playback.dispose();
+  });
 
   test('advances once when playback completes', () async {
     final playback = QueueTestPlaybackController();
@@ -90,6 +156,11 @@ class QueueTestPlaybackController implements PlaybackController {
 
   void emitCompleted() {
     _state = _state.copyWith(status: PlaybackStatus.completed, completed: true);
+    _states.add(_state);
+  }
+
+  void emitPosition(Duration position) {
+    _state = _state.copyWith(position: position);
     _states.add(_state);
   }
 

@@ -640,7 +640,12 @@ class _PlayerBar extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         IconButton(
-                          onPressed: queue.hasPrevious
+                          onPressed:
+                              queue.hasPrevious ||
+                                  (hasTrack &&
+                                      playback.position >
+                                          PlaybackQueueController
+                                              .previousRestartThreshold)
                               ? queueController.previous
                               : null,
                           tooltip: 'Previous',

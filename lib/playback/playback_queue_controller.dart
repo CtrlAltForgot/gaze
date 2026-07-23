@@ -32,6 +32,8 @@ class PlaybackQueueController {
   PlaybackQueueState _state = const PlaybackQueueState();
   bool _completionHandled = false;
 
+  static const previousRestartThreshold = Duration(seconds: 5);
+
   PlaybackQueueState get state => _state;
   Stream<PlaybackQueueState> get states => _states.stream;
 
@@ -71,6 +73,10 @@ class PlaybackQueueController {
   }
 
   Future<void> previous() async {
+    if (_playbackController.state.position > previousRestartThreshold) {
+      await _playbackController.seek(Duration.zero);
+      return;
+    }
     if (!_state.hasPrevious) {
       return;
     }
@@ -99,9 +105,20 @@ class PlaybackQueueController {
   Future<void> _openCurrent() async {
     _completionHandled = false;
     await _playbackController.loadRemoteSource(
-      _state.items[_state.currentIndex],
+      _fromBeginning(_state.items[_state.currentIndex]),
     );
     await _playbackController.play();
+  }
+
+  RemotePlaybackSource _fromBeginning(RemotePlaybackSource source) {
+    return RemotePlaybackSource(
+      uri: source.uri,
+      headers: source.headers,
+      title: source.title,
+      artist: source.artist,
+      itemId: source.itemId,
+      artworkBytes: source.artworkBytes,
+    );
   }
 
   void _emit(PlaybackQueueState state) {
