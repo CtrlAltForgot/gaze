@@ -7,6 +7,7 @@ import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
+import 'package:gaze/library/library_search_results.dart';
 import 'package:gaze/library/track_summary.dart';
 import 'package:gaze/main.dart';
 import 'package:gaze/playback/playback_controller.dart';
@@ -169,6 +170,50 @@ void main() {
     expect(find.text('Your music, brought forward.'), findsOneWidget);
     expect(find.text('Recently added'), findsOneWidget);
     expect(find.text('Real Album'), findsOneWidget);
+  });
+
+  testWidgets('searches the real library and plays a matching song', (
+    tester,
+  ) async {
+    final connectionController = createFakeConnectionController();
+    final playbackController = FakePlaybackController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: playbackController,
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextFormField), 'matching');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Search results'), findsOneWidget);
+    expect(find.text('Albums'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Matching Song'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Songs'), findsOneWidget);
+    expect(find.text('Matching Song'), findsOneWidget);
+
+    await tester.tap(find.text('Matching Song'));
+    await tester.pumpAndSettle();
+
+    expect(playbackController.loadedRemoteSource?.title, 'Matching Song');
+    expect(playbackController.loadedRemoteSource?.itemId, 'search-track-id');
+    expect(
+      playbackController.loadedRemoteSource?.headers['Authorization'],
+      'test-auth-header',
+    );
   });
 
   testWidgets('browses albums and opens a track listing', (tester) async {
@@ -369,6 +414,26 @@ class FakeJellyfinApi implements JellyfinApi {
       trackNumber: 1,
     ),
   ];
+
+  @override
+  Future<LibrarySearchResults> searchLibrary({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String query,
+    int limit = 24,
+  }) async => const LibrarySearchResults(
+    albums: [album],
+    tracks: [
+      TrackSearchResult(
+        track: TrackSummary(
+          id: 'search-track-id',
+          title: 'Matching Song',
+          artist: 'Real Artist',
+          duration: Duration(minutes: 2, seconds: 5),
+        ),
+      ),
+    ],
+  );
 
   @override
   Future<List<AlbumSummary>> getRecentlyAddedAlbums({

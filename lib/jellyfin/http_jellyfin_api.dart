@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../library/album_summary.dart';
+import '../library/library_search_results.dart';
 import '../library/track_summary.dart';
 import '../storage/artwork_cache.dart';
 import 'jellyfin_api.dart';
@@ -280,6 +281,107 @@ class HttpJellyfinApi implements JellyfinApi {
           );
         })
         .toList(growable: false);
+  }
+
+  @override
+  Future<LibrarySearchResults> searchLibrary({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String query,
+    int limit = 24,
+  }) async {
+    final term = query.trim();
+    if (term.isEmpty) {
+      return const LibrarySearchResults();
+    }
+    final uri = address
+        .endpoint('/Users/${session.userId}/Items')
+        .replace(
+          queryParameters: {
+            'SearchTerm': term,
+            'IncludeItemTypes': 'MusicAlbum,Audio',
+            'Recursive': 'true',
+            'Limit': '$limit',
+            'SortBy': 'SortName',
+            'SortOrder': 'Ascending',
+            'Fields':
+                'AlbumArtist,Artists,AlbumId,AlbumPrimaryImageTag,ProductionYear,RunTimeTicks',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'search the music library');
+    final values = _decodeObject(response.body)['Items'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned incomplete search results.',
+      );
+    }
+
+    final albums = <AlbumSummary>[];
+    final tracks = <TrackSearchResult>[];
+    for (final value in values.whereType<Map<String, dynamic>>()) {
+      final type = value['Type'];
+      final id = value['Id'];
+      final title = value['Name'];
+      if (id is! String || id.isEmpty || title is! String || title.isEmpty) {
+        continue;
+      }
+      if (type == 'MusicAlbum') {
+        final imageTag = _primaryImageTag(value);
+        albums.add(
+          AlbumSummary(
+            id: id,
+            title: title,
+            artist: _albumArtist(value),
+            year: value['ProductionYear'] is int
+                ? value['ProductionYear'] as int
+                : null,
+            imageTag: imageTag,
+            artworkBytes: imageTag == null
+                ? null
+                : await _loadArtwork(address, session, id, imageTag),
+          ),
+        );
+      } else if (type == 'Audio') {
+        final ticks = value['RunTimeTicks'];
+        final albumId = value['AlbumId'];
+        final albumImageTag = value['AlbumPrimaryImageTag'];
+        tracks.add(
+          TrackSearchResult(
+            track: TrackSummary(
+              id: id,
+              title: title,
+              artist: _trackArtist(value),
+              duration: Duration(microseconds: ticks is int ? ticks ~/ 10 : 0),
+              trackNumber: value['IndexNumber'] is int
+                  ? value['IndexNumber'] as int
+                  : null,
+              discNumber: value['ParentIndexNumber'] is int
+                  ? value['ParentIndexNumber'] as int
+                  : null,
+            ),
+            artworkBytes:
+                albumId is String &&
+                    albumId.isNotEmpty &&
+                    albumImageTag is String &&
+                    albumImageTag.isNotEmpty
+                ? await _loadArtwork(address, session, albumId, albumImageTag)
+                : null,
+          ),
+        );
+      }
+    }
+    return LibrarySearchResults(albums: albums, tracks: tracks);
+  }
+
+  String? _primaryImageTag(Map<String, dynamic> item) {
+    final tags = item['ImageTags'];
+    final tag = tags is Map ? tags['Primary'] : null;
+    return tag is String && tag.isNotEmpty ? tag : null;
   }
 
   @override

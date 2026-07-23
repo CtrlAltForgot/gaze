@@ -1,4 +1,5 @@
 import '../library/album_summary.dart';
+import '../library/library_search_results.dart';
 import '../library/track_summary.dart';
 
 class JellyfinServerAddress {
@@ -119,6 +120,13 @@ abstract interface class JellyfinApi {
     required JellyfinServerAddress address,
     required JellyfinSession session,
     required String albumId,
+  });
+
+  Future<LibrarySearchResults> searchLibrary({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String query,
+    int limit = 24,
   });
 
   Future<void> validateSession({

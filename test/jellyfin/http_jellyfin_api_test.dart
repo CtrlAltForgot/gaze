@@ -318,6 +318,63 @@ void main() {
       api.close();
     });
 
+    test('searches albums and songs with one authenticated request', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/Users/user-id/Items');
+        expect(request.url.queryParameters['SearchTerm'], 'real');
+        expect(
+          request.url.queryParameters['IncludeItemTypes'],
+          'MusicAlbum,Audio',
+        );
+        expect(request.url.query, isNot(contains('private-access-token')));
+        expect(
+          request.headers['authorization'],
+          contains('Token="private-access-token"'),
+        );
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Type': 'MusicAlbum',
+                'Id': 'album-id',
+                'Name': 'Real Album',
+                'AlbumArtist': 'Real Artist',
+                'ProductionYear': 2026,
+              },
+              {
+                'Type': 'Audio',
+                'Id': 'track-id',
+                'Name': 'Real Song',
+                'Artists': ['Real Artist'],
+                'RunTimeTicks': 1250000000,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final results = await api.searchLibrary(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        query: ' real ',
+      );
+
+      expect(results.albums.single.title, 'Real Album');
+      expect(results.albums.single.year, 2026);
+      expect(results.tracks.single.track.title, 'Real Song');
+      expect(
+        results.tracks.single.track.duration,
+        const Duration(minutes: 2, seconds: 5),
+      );
+      api.close();
+    });
+
     test('reports HTTP status without exposing a private response', () async {
       final client = MockClient(
         (_) async => http.Response('private server response', 401),

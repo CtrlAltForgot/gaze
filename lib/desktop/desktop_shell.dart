@@ -8,6 +8,7 @@ import '../design/gaze_theme.dart';
 import '../design/artwork_palette.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
+import '../library/library_search_results.dart';
 import '../library/track_summary.dart';
 import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
@@ -49,6 +50,12 @@ class _DesktopShellState extends State<DesktopShell> {
   AlbumSummary? _albumOpenedFromHome;
   ArtworkPalette _palette = ArtworkPalette.fallback;
   Uint8List? _paletteArtwork;
+  Timer? _searchDebounce;
+  String _searchQuery = '';
+  LibrarySearchResults? _searchResults;
+  bool _searching = false;
+  String? _searchError;
+  int _searchRequest = 0;
 
   bool get _connected => widget.connectionController.state.canBrowseLibrary;
 
@@ -90,6 +97,7 @@ class _DesktopShellState extends State<DesktopShell> {
   void dispose() {
     unawaited(_connectionSubscription?.cancel());
     unawaited(_playbackSubscription?.cancel());
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -167,6 +175,67 @@ class _DesktopShellState extends State<DesktopShell> {
 
   void _openAlbum(AlbumSummary album) {
     setState(() => _albumOpenedFromHome = album);
+  }
+
+  void _handleSearchChanged(String value) {
+    final query = value.trim();
+    _searchDebounce?.cancel();
+    if (query.isEmpty) {
+      _searchRequest++;
+      setState(() {
+        _searchQuery = '';
+        _searchResults = null;
+        _searching = false;
+        _searchError = null;
+      });
+      return;
+    }
+    setState(() {
+      _searchQuery = query;
+      _searching = true;
+      _searchError = null;
+    });
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 350),
+      () => _search(query),
+    );
+  }
+
+  Future<void> _search(String query) async {
+    final request = ++_searchRequest;
+    try {
+      final results = await widget.connectionController.searchLibrary(query);
+      if (mounted && request == _searchRequest) {
+        setState(() {
+          _searchResults = results;
+          _searching = false;
+        });
+      }
+    } on Exception catch (error) {
+      if (mounted && request == _searchRequest) {
+        setState(() {
+          _searchResults = null;
+          _searching = false;
+          _searchError = error.toString();
+        });
+      }
+    }
+  }
+
+  Future<void> _playSearchTrack(TrackSearchResult result) {
+    final stream = widget.connectionController.createDirectPlaySource(
+      result.track.id,
+    );
+    return widget.queueController.playAlbum([
+      RemotePlaybackSource(
+        uri: stream.uri,
+        headers: stream.headers,
+        title: result.track.title,
+        artist: result.track.artist,
+        itemId: result.track.id,
+        artworkBytes: result.artworkBytes,
+      ),
+    ], startIndex: 0);
   }
 
   Future<void> _playAlbum(
@@ -275,6 +344,12 @@ class _DesktopShellState extends State<DesktopShell> {
                                           widget.onOpenJellyfinConnection,
                                       onRetry: _retryConnection,
                                       onOpenAlbum: _openAlbum,
+                                      searchQuery: _searchQuery,
+                                      searchResults: _searchResults,
+                                      searching: _searching,
+                                      searchError: _searchError,
+                                      onSearchChanged: _handleSearchChanged,
+                                      onPlaySearchTrack: _playSearchTrack,
                                     ),
                                     _LibraryDestination.albums => AlbumsPage(
                                       connectionController:
@@ -635,6 +710,12 @@ class _HomeContent extends StatelessWidget {
     required this.onConnect,
     required this.onRetry,
     required this.onOpenAlbum,
+    required this.searchQuery,
+    required this.searchResults,
+    required this.searching,
+    required this.searchError,
+    required this.onSearchChanged,
+    required this.onPlaySearchTrack,
   });
 
   final bool connected;
@@ -645,6 +726,12 @@ class _HomeContent extends StatelessWidget {
   final VoidCallback onConnect;
   final VoidCallback onRetry;
   final ValueChanged<AlbumSummary> onOpenAlbum;
+  final String searchQuery;
+  final LibrarySearchResults? searchResults;
+  final bool searching;
+  final String? searchError;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<TrackSearchResult> onPlaySearchTrack;
 
   @override
   Widget build(BuildContext context) {
@@ -678,9 +765,11 @@ class _HomeContent extends StatelessWidget {
                 const SizedBox(width: GazeSpacing.large),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 280),
-                  child: TextField(
+                  child: TextFormField(
+                    initialValue: searchQuery,
+                    onChanged: onSearchChanged,
                     decoration: InputDecoration(
-                      hintText: 'Search your library',
+                      hintText: 'Search albums and songs',
                       prefixIcon: const Icon(Icons.search_rounded),
                       filled: true,
                       fillColor: GazeColors.surface.withValues(alpha: .38),
@@ -735,14 +824,151 @@ class _HomeContent extends StatelessWidget {
               ),
             ),
           ),
-        if (loading)
+        if (searchQuery.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              GazeSpacing.xLarge,
+              GazeSpacing.xLarge,
+              GazeSpacing.medium,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                'Search results',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+          ),
+        if (searchQuery.isNotEmpty && searching)
           const SliverPadding(
             padding: EdgeInsets.symmetric(vertical: GazeSpacing.xxLarge),
             sliver: SliverToBoxAdapter(
               child: Center(child: CircularProgressIndicator()),
             ),
           )
-        else if (!connected)
+        else if (searchQuery.isNotEmpty && searchError != null)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _LibraryMessage(
+              icon: Icons.search_off_rounded,
+              title: 'Search could not be completed',
+              message: searchError!,
+            ),
+          )
+        else if (searchQuery.isNotEmpty &&
+            searchResults != null &&
+            searchResults!.isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _LibraryMessage(
+              icon: Icons.search_off_rounded,
+              title: 'No matches found',
+              message: 'No albums or songs matched “$searchQuery”.',
+            ),
+          ),
+        if (searchQuery.isNotEmpty &&
+            !searching &&
+            searchError == null &&
+            searchResults != null &&
+            searchResults!.albums.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              GazeSpacing.medium,
+              GazeSpacing.xLarge,
+              GazeSpacing.small,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                'Albums',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+          ),
+        if (searchQuery.isNotEmpty &&
+            !searching &&
+            searchError == null &&
+            searchResults != null &&
+            searchResults!.albums.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              0,
+              GazeSpacing.xLarge,
+              GazeSpacing.large,
+            ),
+            sliver: SliverGrid.builder(
+              itemCount: searchResults!.albums.length,
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 230,
+                crossAxisSpacing: GazeSpacing.large,
+                mainAxisSpacing: GazeSpacing.large,
+                childAspectRatio: .78,
+              ),
+              itemBuilder: (context, index) {
+                final album = searchResults!.albums[index];
+                return _AlbumCard(
+                  album: album,
+                  onTap: () => onOpenAlbum(album),
+                );
+              },
+            ),
+          ),
+        if (searchQuery.isNotEmpty &&
+            !searching &&
+            searchError == null &&
+            searchResults != null &&
+            searchResults!.tracks.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              GazeSpacing.medium,
+              GazeSpacing.xLarge,
+              GazeSpacing.small,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: Text(
+                'Songs',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+          ),
+        if (searchQuery.isNotEmpty &&
+            !searching &&
+            searchError == null &&
+            searchResults != null &&
+            searchResults!.tracks.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              0,
+              GazeSpacing.xLarge,
+              GazeSpacing.xLarge,
+            ),
+            sliver: SliverList.separated(
+              itemCount: searchResults!.tracks.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final result = searchResults!.tracks[index];
+                return ListTile(
+                  minTileHeight: 64,
+                  leading: _SearchTrackArtwork(result: result),
+                  title: Text(result.track.title),
+                  subtitle: Text(result.track.artist),
+                  trailing: Text(_compactDuration(result.track.duration)),
+                  onTap: () => onPlaySearchTrack(result),
+                );
+              },
+            ),
+          ),
+        if (searchQuery.isEmpty && loading)
+          const SliverPadding(
+            padding: EdgeInsets.symmetric(vertical: GazeSpacing.xxLarge),
+            sliver: SliverToBoxAdapter(
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          )
+        else if (searchQuery.isEmpty && !connected)
           SliverFillRemaining(
             hasScrollBody: false,
             child: _LibraryMessage(
@@ -753,7 +979,7 @@ class _HomeContent extends StatelessWidget {
               onPressed: onConnect,
             ),
           )
-        else if (error != null)
+        else if (searchQuery.isEmpty && error != null)
           SliverFillRemaining(
             hasScrollBody: false,
             child: _LibraryMessage(
@@ -764,7 +990,7 @@ class _HomeContent extends StatelessWidget {
               onPressed: onRetry,
             ),
           )
-        else if (albums.isEmpty)
+        else if (searchQuery.isEmpty && albums.isEmpty)
           const SliverFillRemaining(
             hasScrollBody: false,
             child: _LibraryMessage(
@@ -774,7 +1000,11 @@ class _HomeContent extends StatelessWidget {
                   'gaze connected successfully, but Jellyfin returned no music albums.',
             ),
           ),
-        if (connected && !loading && error == null && albums.isNotEmpty)
+        if (searchQuery.isEmpty &&
+            connected &&
+            !loading &&
+            error == null &&
+            albums.isNotEmpty)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               GazeSpacing.xLarge,
@@ -789,7 +1019,11 @@ class _HomeContent extends StatelessWidget {
               ),
             ),
           ),
-        if (connected && !loading && error == null && albums.isNotEmpty)
+        if (searchQuery.isEmpty &&
+            connected &&
+            !loading &&
+            error == null &&
+            albums.isNotEmpty)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
               GazeSpacing.xLarge,
@@ -824,6 +1058,31 @@ class _HomeContent extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _SearchTrackArtwork extends StatelessWidget {
+  const _SearchTrackArtwork({required this.result});
+
+  final TrackSearchResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 48,
+      height: 48,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: GazeColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(GazeRadii.control),
+      ),
+      child: result.artworkBytes == null
+          ? const Icon(
+              Icons.music_note_rounded,
+              color: GazeColors.textSecondary,
+            )
+          : Image.memory(result.artworkBytes!, fit: BoxFit.cover),
     );
   }
 }
