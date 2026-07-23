@@ -9,6 +9,7 @@ import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
 import 'package:gaze/library/artist_summary.dart';
 import 'package:gaze/library/library_search_results.dart';
+import 'package:gaze/library/song_summary.dart';
 import 'package:gaze/library/track_lyrics.dart';
 import 'package:gaze/library/track_summary.dart';
 import 'package:gaze/main.dart';
@@ -154,6 +155,12 @@ void main() {
     expect(find.text('Your music, brought forward.'), findsOneWidget);
     expect(find.text('Search albums and songs'), findsOneWidget);
 
+    tester.view.physicalSize = const Size(850, 720);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Slider), findsNWidgets(2));
+
     tester.view.physicalSize = const Size(2048, 1080);
     await tester.pumpAndSettle();
 
@@ -245,6 +252,43 @@ void main() {
 
     expect(playbackController.loadedRemoteSource?.title, 'Matching Song');
     expect(playbackController.loadedRemoteSource?.itemId, 'search-track-id');
+    expect(
+      playbackController.loadedRemoteSource?.headers['Authorization'],
+      'test-auth-header',
+    );
+  });
+
+  testWidgets('browses and plays the real song library', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1280, 720);
+    addTearDown(tester.view.reset);
+    final connectionController = createFakeConnectionController();
+    final playbackController = FakePlaybackController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: playbackController,
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Songs'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 song'), findsOneWidget);
+    expect(find.text('A Library Song'), findsOneWidget);
+    expect(find.text('Real Album'), findsOneWidget);
+
+    await tester.tap(find.text('A Library Song'));
+    await tester.pumpAndSettle();
+
+    expect(playbackController.loadedRemoteSource?.title, 'A Library Song');
+    expect(playbackController.loadedRemoteSource?.itemId, 'song-id');
     expect(
       playbackController.loadedRemoteSource?.headers['Authorization'],
       'test-auth-header',
@@ -552,6 +596,27 @@ class FakeJellyfinApi implements JellyfinApi {
       trackNumber: 1,
     ),
   ];
+
+  @override
+  Future<SongPage> getSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const SongPage(
+    songs: [
+      SongSummary(
+        track: TrackSummary(
+          id: 'song-id',
+          title: 'A Library Song',
+          artist: 'Real Artist',
+          duration: Duration(minutes: 3, seconds: 5),
+        ),
+        album: 'Real Album',
+      ),
+    ],
+    totalCount: 1,
+  );
 
   @override
   Future<TrackLyrics?> getLyrics({

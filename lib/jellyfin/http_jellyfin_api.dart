@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../library/album_summary.dart';
 import '../library/artist_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/song_summary.dart';
 import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../storage/artwork_cache.dart';
@@ -397,6 +398,85 @@ class HttpJellyfinApi implements JellyfinApi {
           );
         })
         .toList(growable: false);
+  }
+
+  @override
+  Future<SongPage> getSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async {
+    final uri = address
+        .endpoint('/Users/${session.userId}/Items')
+        .replace(
+          queryParameters: {
+            'IncludeItemTypes': 'Audio',
+            'Recursive': 'true',
+            'SortBy': 'SortName',
+            'SortOrder': 'Ascending',
+            'StartIndex': '$startIndex',
+            'Limit': '$limit',
+            'Fields': 'Artists,Album,AlbumId,AlbumPrimaryImageTag,RunTimeTicks',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'load songs');
+    final body = _decodeObject(response.body);
+    final values = body['Items'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an incomplete song list.',
+      );
+    }
+    final songs = <SongSummary>[];
+    for (final value in values.whereType<Map<String, dynamic>>()) {
+      final id = value['Id'];
+      final title = value['Name'];
+      if (id is! String || id.isEmpty || title is! String || title.isEmpty) {
+        continue;
+      }
+      final ticks = value['RunTimeTicks'];
+      final albumId = value['AlbumId'];
+      final imageTag = value['AlbumPrimaryImageTag'];
+      songs.add(
+        SongSummary(
+          track: TrackSummary(
+            id: id,
+            title: title,
+            artist: _trackArtist(value),
+            duration: Duration(microseconds: ticks is int ? ticks ~/ 10 : 0),
+            trackNumber: value['IndexNumber'] is int
+                ? value['IndexNumber'] as int
+                : null,
+            discNumber: value['ParentIndexNumber'] is int
+                ? value['ParentIndexNumber'] as int
+                : null,
+          ),
+          album:
+              value['Album'] is String && (value['Album'] as String).isNotEmpty
+              ? value['Album'] as String
+              : 'Unknown album',
+          artworkBytes:
+              albumId is String &&
+                  albumId.isNotEmpty &&
+                  imageTag is String &&
+                  imageTag.isNotEmpty
+              ? await _loadArtwork(address, session, albumId, imageTag)
+              : null,
+        ),
+      );
+    }
+    return SongPage(
+      songs: songs,
+      totalCount: body['TotalRecordCount'] is int
+          ? body['TotalRecordCount'] as int
+          : songs.length,
+    );
   }
 
   @override

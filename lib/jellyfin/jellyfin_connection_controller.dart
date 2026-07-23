@@ -3,6 +3,7 @@ import 'dart:async';
 import '../library/album_summary.dart';
 import '../library/artist_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/song_summary.dart';
 import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../storage/artwork_cache.dart';
@@ -413,6 +414,16 @@ class JellyfinConnectionController {
       address: address,
       session: session,
       albumId: albumId,
+    );
+  }
+
+  Future<SongPage> loadSongs({required int startIndex, required int limit}) {
+    final (:api, :address, :session) = _requireConnection();
+    return api.getSongs(
+      address: address,
+      session: session,
+      startIndex: startIndex,
+      limit: limit,
     );
   }
 

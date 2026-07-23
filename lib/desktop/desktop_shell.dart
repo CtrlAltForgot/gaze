@@ -9,6 +9,7 @@ import '../design/artwork_palette.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
 import '../library/library_search_results.dart';
+import '../library/song_summary.dart';
 import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
 import '../playback/playback_controller.dart';
@@ -17,8 +18,9 @@ import '../storage/artwork_palette_cache.dart';
 import 'albums_page.dart';
 import 'artists_page.dart';
 import 'smooth_scroll_controller.dart';
+import 'songs_page.dart';
 
-enum _LibraryDestination { home, albums, artists }
+enum _LibraryDestination { home, albums, artists, songs }
 
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
@@ -266,6 +268,24 @@ class _DesktopShellState extends State<DesktopShell> {
     return widget.queueController.playAlbum(sources, startIndex: startIndex);
   }
 
+  Future<void> _playSongs(List<SongSummary> songs, int startIndex) {
+    final sources = songs
+        .map((song) {
+          final jellyfinSource = widget.connectionController
+              .createDirectPlaySource(song.track.id);
+          return RemotePlaybackSource(
+            uri: jellyfinSource.uri,
+            headers: jellyfinSource.headers,
+            title: song.track.title,
+            artist: song.track.artist,
+            itemId: song.track.id,
+            artworkBytes: song.artworkBytes,
+          );
+        })
+        .toList(growable: false);
+    return widget.queueController.playAlbum(sources, startIndex: startIndex);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -374,6 +394,13 @@ class _DesktopShellState extends State<DesktopShell> {
                                       onConnect:
                                           widget.onOpenJellyfinConnection,
                                       onPlayTrack: _playAlbum,
+                                    ),
+                                    _LibraryDestination.songs => SongsPage(
+                                      connectionController:
+                                          widget.connectionController,
+                                      onConnect:
+                                          widget.onOpenJellyfinConnection,
+                                      onPlaySongs: _playSongs,
                                     ),
                                   },
                           ),
@@ -632,6 +659,8 @@ class _Navigation extends StatelessWidget {
                 icon: Icons.music_note_rounded,
                 label: 'Songs',
                 compact: compact,
+                selected: destination == _LibraryDestination.songs,
+                onTap: () => onDestinationChanged(_LibraryDestination.songs),
               ),
               _NavigationItem(
                 icon: Icons.queue_music_rounded,
@@ -1633,11 +1662,7 @@ class _PlayerBar extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: compact
-                        ? 52
-                        : wide
-                        ? 200
-                        : 160,
+                    width: 200,
                     child: Row(
                       children: [
                         IconButton(
@@ -1653,15 +1678,13 @@ class _PlayerBar extends StatelessWidget {
                                 : Icons.lyrics_outlined,
                           ),
                         ),
-                        if (!compact) ...[
-                          const Icon(Icons.volume_up_rounded, size: 20),
-                          Expanded(
-                            child: Slider(
-                              value: playback.volume.clamp(0, 1),
-                              onChanged: controller.setVolume,
-                            ),
+                        const Icon(Icons.volume_up_rounded, size: 20),
+                        Expanded(
+                          child: Slider(
+                            value: playback.volume.clamp(0, 1),
+                            onChanged: controller.setVolume,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),

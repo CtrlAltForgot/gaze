@@ -318,6 +318,53 @@ void main() {
       api.close();
     });
 
+    test('loads a paged alphabetical song library', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/Users/user-id/Items');
+        expect(request.url.queryParameters['IncludeItemTypes'], 'Audio');
+        expect(request.url.queryParameters['SortBy'], 'SortName');
+        expect(request.url.queryParameters['StartIndex'], '100');
+        expect(request.url.queryParameters['Limit'], '100');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Id': 'song-id',
+                'Name': 'A Library Song',
+                'Artists': ['Real Artist'],
+                'Album': 'Real Album',
+                'RunTimeTicks': 1850000000,
+              },
+            ],
+            'TotalRecordCount': 201,
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final page = await api.getSongs(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        startIndex: 100,
+        limit: 100,
+      );
+
+      expect(page.totalCount, 201);
+      expect(page.songs.single.track.title, 'A Library Song');
+      expect(page.songs.single.track.artist, 'Real Artist');
+      expect(page.songs.single.album, 'Real Album');
+      expect(
+        page.songs.single.track.duration,
+        const Duration(minutes: 3, seconds: 5),
+      );
+      api.close();
+    });
+
     test('loads a paged alphabetical artist library', () async {
       final client = MockClient((request) async {
         expect(request.url.path, '/Artists');
