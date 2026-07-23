@@ -29,7 +29,7 @@ The interface should explain itself through hierarchy, placement, feedback, and 
 - Animation should preserve context: artwork can transition into Now Playing, panels can reveal their origin, and queue changes can visibly settle into place.
 - Prefer short, responsive transitions for controls and navigation; reserve slower cinematic motion for infrequent, artwork-focused moments.
 - Never delay a common action to show animation. Input feedback must be immediate.
-- Avoid constant ambient movement. A calm interface gives the music and artwork room to lead.
+- Allow extremely slow artwork-derived ambient background movement while music is active, so the current album can own the visual atmosphere without making controls or content move. Keep it calm, freeze it under reduced motion, and avoid unrelated decorative animation.
 - Respect reduced-motion settings with simpler fades or immediate state changes.
 - Define loading, buffering, disabled, success, and failure feedback consistently.
 
@@ -53,4 +53,3 @@ The interface should explain itself through hierarchy, placement, feedback, and 
 ## Originality guardrail
 
 Do not recreate another service's exact navigation, icon arrangement, gradients, page structure, or signature interactions. For each major screen, start with the listener's task and gaze's desktop layout system. References may set the quality bar; gaze's hierarchy, proportions, motion, and details must form a coherent identity of their own.
-

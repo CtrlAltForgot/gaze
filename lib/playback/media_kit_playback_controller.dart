@@ -7,12 +7,16 @@ import 'playback_controller.dart';
 class MediaKitPlaybackController implements PlaybackController {
   MediaKitPlaybackController({Player? player}) : _player = player ?? Player() {
     _subscriptions = [
-      _player.stream.position.listen(
-        (position) => _emit(_state.copyWith(position: position)),
-      ),
-      _player.stream.duration.listen(
-        (duration) => _emit(_state.copyWith(duration: duration)),
-      ),
+      _player.stream.position.listen((position) {
+        if (!_openingSource) {
+          _emit(_state.copyWith(position: position));
+        }
+      }),
+      _player.stream.duration.listen((duration) {
+        if (!_openingSource) {
+          _emit(_state.copyWith(duration: duration));
+        }
+      }),
       _player.stream.volume.listen(
         (volume) => _emit(_state.copyWith(volume: volume / 100)),
       ),
@@ -56,6 +60,7 @@ class MediaKitPlaybackController implements PlaybackController {
       StreamController<PlaybackSnapshot>.broadcast();
   late final List<StreamSubscription<dynamic>> _subscriptions;
   PlaybackSnapshot _state = const PlaybackSnapshot();
+  bool _openingSource = false;
 
   @override
   PlaybackSnapshot get state => _state;
@@ -93,6 +98,7 @@ class MediaKitPlaybackController implements PlaybackController {
       _reportError('The remote audio source is not a valid HTTP or HTTPS URL.');
       return;
     }
+    _openingSource = true;
     _emit(
       PlaybackSnapshot(
         status: PlaybackStatus.loading,
@@ -105,22 +111,34 @@ class MediaKitPlaybackController implements PlaybackController {
         position: source.startPosition,
       ),
     );
-    await _run(() async {
-      await _player.open(
-        Media(
-          url.toString(),
-          httpHeaders: source.headers,
-          start: source.startPosition > Duration.zero
-              ? source.startPosition
-              : null,
-        ),
-        play: false,
-      );
-      _emit(_state.copyWith(status: PlaybackStatus.ready, clearError: true));
-    });
+    try {
+      await _run(() async {
+        await _player.open(
+          Media(
+            url.toString(),
+            httpHeaders: source.headers,
+            start: source.startPosition > Duration.zero
+                ? source.startPosition
+                : null,
+          ),
+          play: false,
+        );
+        _emit(
+          _state.copyWith(
+            status: PlaybackStatus.ready,
+            position: _player.state.position,
+            duration: _player.state.duration,
+            clearError: true,
+          ),
+        );
+      });
+    } finally {
+      _openingSource = false;
+    }
   }
 
   Future<void> _load(String source, String label) async {
+    _openingSource = true;
     _emit(
       PlaybackSnapshot(
         status: PlaybackStatus.loading,
@@ -129,10 +147,21 @@ class MediaKitPlaybackController implements PlaybackController {
       ),
     );
 
-    await _run(() async {
-      await _player.open(Media(source), play: false);
-      _emit(_state.copyWith(status: PlaybackStatus.ready, clearError: true));
-    });
+    try {
+      await _run(() async {
+        await _player.open(Media(source), play: false);
+        _emit(
+          _state.copyWith(
+            status: PlaybackStatus.ready,
+            position: _player.state.position,
+            duration: _player.state.duration,
+            clearError: true,
+          ),
+        );
+      });
+    } finally {
+      _openingSource = false;
+    }
   }
 
   @override

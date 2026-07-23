@@ -29,7 +29,23 @@ void main() {
     ]);
 
     expect(HSVColor.fromColor(palette.accent).saturation, lessThan(.1));
-    expect(palette.background, hasLength(3));
+    expect(palette.background, hasLength(4));
+  });
+
+  test('does not let a tiny colorful detail dominate neutral artwork', () {
+    final palette = deriveArtworkPalette([
+      ...List.filled(70, const Color(0xFF111111)),
+      ...List.filled(25, const Color(0xFFE8E8E8)),
+      ...List.filled(5, const Color(0xFFE06A20)),
+    ]);
+
+    expect(HSVColor.fromColor(palette.accent).saturation, lessThan(.1));
+    expect(
+      palette.background.every(
+        (color) => HSVColor.fromColor(color).saturation < .1,
+      ),
+      isTrue,
+    );
   });
 
   test('uses a stable fallback without artwork samples', () {

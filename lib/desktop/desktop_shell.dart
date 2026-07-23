@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -156,27 +157,20 @@ class _DesktopShellState extends State<DesktopShell> {
         body: Stack(
           children: [
             Positioned.fill(
-              child: AnimatedContainer(
+              child: AnimatedSwitcher(
                 duration: MediaQuery.disableAnimationsOf(context)
                     ? Duration.zero
-                    : const Duration(milliseconds: 700),
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      _palette.background[0],
-                      Color.lerp(
-                        _palette.background[0],
-                        _palette.background[1],
-                        .45,
-                      )!,
-                      _palette.background[1],
-                      _palette.background[2],
-                    ],
-                    stops: const [0, .34, .7, 1],
+                    : const Duration(milliseconds: 900),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _AmbientArtworkBackground(
+                  key: ValueKey(
+                    _palette.background.map((color) => color.toARGB32()).join(),
                   ),
+                  colors: _palette.background,
+                  animate:
+                      _paletteArtwork != null &&
+                      !MediaQuery.disableAnimationsOf(context),
                 ),
               ),
             ),
@@ -237,6 +231,138 @@ class _DesktopShellState extends State<DesktopShell> {
       ),
     );
   }
+}
+
+class _AmbientArtworkBackground extends StatefulWidget {
+  const _AmbientArtworkBackground({
+    required this.colors,
+    required this.animate,
+    super.key,
+  });
+
+  final List<Color> colors;
+  final bool animate;
+
+  @override
+  State<_AmbientArtworkBackground> createState() =>
+      _AmbientArtworkBackgroundState();
+}
+
+class _AmbientArtworkBackgroundState extends State<_AmbientArtworkBackground>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 36),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _updateMotion();
+  }
+
+  @override
+  void didUpdateWidget(_AmbientArtworkBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animate != widget.animate) {
+      _updateMotion();
+    }
+  }
+
+  void _updateMotion() {
+    if (widget.animate) {
+      _controller.repeat();
+    } else {
+      _controller
+        ..stop()
+        ..value = .18;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _AmbientArtworkPainter(
+          colors: widget.colors,
+          motion: _controller,
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _AmbientArtworkPainter extends CustomPainter {
+  _AmbientArtworkPainter({required this.colors, required this.motion})
+    : super(repaint: motion);
+
+  final List<Color> colors;
+  final Animation<double> motion;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = colors.last);
+    final phase = motion.value * math.pi * 2;
+    final shortest = math.min(size.width, size.height);
+    final blobs = [
+      (
+        center: Offset(
+          size.width * (.18 + .1 * math.sin(phase)),
+          size.height * (.2 + .12 * math.cos(phase * .83)),
+        ),
+        radius: math.max(shortest * .85, size.width * .42),
+      ),
+      (
+        center: Offset(
+          size.width * (.76 + .11 * math.cos(phase * .71)),
+          size.height * (.28 + .14 * math.sin(phase * .91)),
+        ),
+        radius: math.max(shortest * .72, size.width * .36),
+      ),
+      (
+        center: Offset(
+          size.width * (.55 + .14 * math.sin(phase * .61 + 2)),
+          size.height * (.82 + .1 * math.cos(phase * .77 + 1)),
+        ),
+        radius: math.max(shortest * .8, size.width * .4),
+      ),
+    ];
+    for (var index = 0; index < blobs.length; index++) {
+      final blob = blobs[index];
+      final color = colors[index % colors.length];
+      canvas.drawCircle(
+        blob.center,
+        blob.radius,
+        Paint()
+          ..shader =
+              RadialGradient(
+                colors: [
+                  color.withValues(alpha: .92),
+                  color.withValues(alpha: .42),
+                  color.withValues(alpha: 0),
+                ],
+                stops: const [0, .48, 1],
+              ).createShader(
+                Rect.fromCircle(center: blob.center, radius: blob.radius),
+              ),
+      );
+    }
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0x18000000),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_AmbientArtworkPainter oldDelegate) =>
+      oldDelegate.colors != colors;
 }
 
 class _Navigation extends StatelessWidget {

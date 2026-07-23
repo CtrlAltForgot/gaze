@@ -8,7 +8,12 @@ class ArtworkPalette {
 
   static const fallback = ArtworkPalette(
     accent: Color(0xFFB78CFF),
-    background: [Color(0xFF2B2038), Color(0xFF202431), Color(0xFF241F30)],
+    background: [
+      Color(0xFF2B2038),
+      Color(0xFF202431),
+      Color(0xFF30213A),
+      Color(0xFF241F30),
+    ],
   );
 
   final Color accent;
@@ -64,42 +69,59 @@ ArtworkPalette deriveArtworkPalette(List<Color> samples) {
   }
   final candidates = buckets.values
       .map(
-        (bucket) => Color.from(
-          alpha: 1,
-          red: bucket[1] / bucket[0],
-          green: bucket[2] / bucket[0],
-          blue: bucket[3] / bucket[0],
+        (bucket) => (
+          color: Color.from(
+            alpha: 1,
+            red: bucket[1] / bucket[0],
+            green: bucket[2] / bucket[0],
+            blue: bucket[3] / bucket[0],
+          ),
+          population: bucket[0] / samples.length,
         ),
       )
       .toList();
   candidates.sort((a, b) {
-    final aHsv = HSVColor.fromColor(a);
-    final bHsv = HSVColor.fromColor(b);
-    final aScore = aHsv.saturation * .7 + aHsv.value * .3;
-    final bScore = bHsv.saturation * .7 + bHsv.value * .3;
+    final aHsv = HSVColor.fromColor(a.color);
+    final bHsv = HSVColor.fromColor(b.color);
+    final aScore =
+        a.population * 2.4 + aHsv.saturation * .42 + aHsv.value * .08;
+    final bScore =
+        b.population * 2.4 + bHsv.saturation * .42 + bHsv.value * .08;
     return bScore.compareTo(aScore);
   });
 
+  final chromaticShare =
+      samples
+          .where(
+            (color) =>
+                HSVColor.fromColor(color).saturation >= .12 &&
+                HSVColor.fromColor(color).value >= .12,
+          )
+          .length /
+      samples.length;
+  final useChromaticPalette = chromaticShare >= .08;
   final chromatic = candidates.where(
-    (color) => HSVColor.fromColor(color).saturation >= .12,
+    (candidate) => HSVColor.fromColor(candidate.color).saturation >= .12,
   );
-  final accentSource = chromatic.isEmpty ? candidates.first : chromatic.first;
+  final accentSource = useChromaticPalette && chromatic.isNotEmpty
+      ? chromatic.first.color
+      : candidates.first.color;
   final sourceHsv = HSVColor.fromColor(accentSource);
-  final accent = chromatic.isEmpty
+  final accent = !useChromaticPalette || chromatic.isEmpty
       ? sourceHsv
             .withSaturation(0)
             .withValue(sourceHsv.value.clamp(.5, .78))
             .toColor()
       : sourceHsv
             .withSaturation(sourceHsv.saturation.clamp(.28, .88))
-            .withValue(sourceHsv.value.clamp(.62, .9))
+            .withValue(sourceHsv.value.clamp(.63, .9))
             .toColor();
 
   final background = <Color>[];
   for (final candidate in candidates) {
-    final hsv = HSVColor.fromColor(candidate);
+    final hsv = HSVColor.fromColor(candidate.color);
     final fitted = hsv
-        .withSaturation(hsv.saturation.clamp(0, .82))
+        .withSaturation(useChromaticPalette ? hsv.saturation.clamp(0, .82) : 0)
         .withValue(hsv.value.clamp(.18, .44))
         .toColor();
     if (background.every(
@@ -107,25 +129,14 @@ ArtworkPalette deriveArtworkPalette(List<Color> samples) {
     )) {
       background.add(fitted);
     }
-    if (background.length == 2) {
+    if (background.length == 4) {
       break;
     }
   }
-  while (background.length < 2) {
+  while (background.length < 4) {
     background.add(
       background.isEmpty ? const Color(0xFF242833) : background[0],
     );
   }
-  final blended = Color.lerp(background[0], background[1], .5)!;
-  final blendedHsv = HSVColor.fromColor(blended);
-  return ArtworkPalette(
-    accent: accent,
-    background: [
-      ...background,
-      blendedHsv
-          .withSaturation(blendedHsv.saturation.clamp(.08, .68))
-          .withValue(blendedHsv.value.clamp(.2, .34))
-          .toColor(),
-    ],
-  );
+  return ArtworkPalette(accent: accent, background: background);
 }
