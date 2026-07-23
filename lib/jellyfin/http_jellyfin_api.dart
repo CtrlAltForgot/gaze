@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../library/album_summary.dart';
+import '../library/artist_summary.dart';
 import '../library/library_search_results.dart';
 import '../library/track_lyrics.dart';
 import '../library/track_summary.dart';
@@ -234,6 +235,120 @@ class HttpJellyfinApi implements JellyfinApi {
       albums: albums,
       totalCount: total is int ? total : startIndex + albums.length,
     );
+  }
+
+  @override
+  Future<ArtistPage> getArtists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async {
+    final uri = address
+        .endpoint('/Artists')
+        .replace(
+          queryParameters: {
+            'UserId': session.userId,
+            'Recursive': 'true',
+            'SortBy': 'SortName',
+            'SortOrder': 'Ascending',
+            'StartIndex': '$startIndex',
+            'Limit': '$limit',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'load artists from Jellyfin');
+    final json = _decodeObject(response.body);
+    final values = json['Items'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an incomplete artist list.',
+      );
+    }
+    final artists = <ArtistSummary>[];
+    for (final value in values.whereType<Map<String, dynamic>>()) {
+      final id = value['Id'];
+      final name = value['Name'];
+      if (id is! String || id.isEmpty || name is! String || name.isEmpty) {
+        continue;
+      }
+      final imageTag = _primaryImageTag(value);
+      artists.add(
+        ArtistSummary(
+          id: id,
+          name: name,
+          imageTag: imageTag,
+          artworkBytes: imageTag == null
+              ? null
+              : await _loadArtwork(address, session, id, imageTag),
+        ),
+      );
+    }
+    final total = json['TotalRecordCount'];
+    return ArtistPage(
+      artists: artists,
+      totalCount: total is int ? total : startIndex + artists.length,
+    );
+  }
+
+  @override
+  Future<List<AlbumSummary>> getArtistAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String artistId,
+  }) async {
+    final uri = address
+        .endpoint('/Users/${session.userId}/Items')
+        .replace(
+          queryParameters: {
+            'IncludeItemTypes': 'MusicAlbum',
+            'Recursive': 'true',
+            'AlbumArtistIds': artistId,
+            'SortBy': 'ProductionYear,SortName',
+            'SortOrder': 'Descending',
+            'Fields': 'AlbumArtist,ProductionYear',
+            'ImageTypeLimit': '1',
+            'EnableImageTypes': 'Primary',
+          },
+        );
+    final response = await _request(
+      () => _client.get(uri, headers: _authenticatedHeaders(session)),
+    );
+    _requireSuccess(response, operation: 'load albums for an artist');
+    final values = _decodeObject(response.body)['Items'];
+    if (values is! List) {
+      throw const JellyfinConnectionException(
+        'Jellyfin returned an incomplete artist album list.',
+      );
+    }
+    final albums = <AlbumSummary>[];
+    for (final value in values.whereType<Map<String, dynamic>>()) {
+      final id = value['Id'];
+      final title = value['Name'];
+      if (id is! String || id.isEmpty || title is! String || title.isEmpty) {
+        continue;
+      }
+      final imageTag = _primaryImageTag(value);
+      albums.add(
+        AlbumSummary(
+          id: id,
+          title: title,
+          artist: _albumArtist(value),
+          year: value['ProductionYear'] is int
+              ? value['ProductionYear'] as int
+              : null,
+          imageTag: imageTag,
+          artworkBytes: imageTag == null
+              ? null
+              : await _loadArtwork(address, session, id, imageTag),
+        ),
+      );
+    }
+    return albums;
   }
 
   @override

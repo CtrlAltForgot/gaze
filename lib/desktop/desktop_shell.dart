@@ -15,9 +15,10 @@ import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
 import '../storage/artwork_palette_cache.dart';
 import 'albums_page.dart';
+import 'artists_page.dart';
 import 'smooth_scroll_controller.dart';
 
-enum _LibraryDestination { home, albums }
+enum _LibraryDestination { home, albums, artists }
 
 class DesktopShell extends StatefulWidget {
   const DesktopShell({
@@ -367,6 +368,13 @@ class _DesktopShellState extends State<DesktopShell> {
                                           widget.onOpenJellyfinConnection,
                                       onPlayTrack: _playAlbum,
                                     ),
+                                    _LibraryDestination.artists => ArtistsPage(
+                                      connectionController:
+                                          widget.connectionController,
+                                      onConnect:
+                                          widget.onOpenJellyfinConnection,
+                                      onPlayTrack: _playAlbum,
+                                    ),
                                   },
                           ),
                           if (_lyricsVisible) ...[
@@ -617,6 +625,8 @@ class _Navigation extends StatelessWidget {
                 icon: Icons.people_outline_rounded,
                 label: 'Artists',
                 compact: compact,
+                selected: destination == _LibraryDestination.artists,
+                onTap: () => onDestinationChanged(_LibraryDestination.artists),
               ),
               _NavigationItem(
                 icon: Icons.music_note_rounded,

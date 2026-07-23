@@ -7,6 +7,7 @@ import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
+import 'package:gaze/library/artist_summary.dart';
 import 'package:gaze/library/library_search_results.dart';
 import 'package:gaze/library/track_lyrics.dart';
 import 'package:gaze/library/track_summary.dart';
@@ -287,6 +288,53 @@ void main() {
     expect(playbackController.soughtPosition, const Duration(seconds: 12));
   });
 
+  testWidgets('browses an artist into an album and playable tracks', (
+    tester,
+  ) async {
+    final connectionController = createFakeConnectionController();
+    final playbackController = FakePlaybackController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: playbackController,
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('Artists'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 artist'), findsOneWidget);
+    expect(find.text('Real Artist'), findsOneWidget);
+
+    await tester.tap(find.text('Real Artist'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('All artists'), findsOneWidget);
+    expect(find.text('Real Album'), findsOneWidget);
+
+    final artistAlbum = find.text('Real Album');
+    await tester.ensureVisible(artistAlbum);
+    await tester.pumpAndSettle();
+    await tester.tap(artistAlbum);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Real Track'), findsOneWidget);
+    await tester.tap(find.text('Real Track'));
+    await tester.pumpAndSettle();
+
+    expect(playbackController.loadedRemoteSource?.title, 'Real Track');
+    expect(
+      playbackController.loadedRemoteSource?.headers['Authorization'],
+      'test-auth-header',
+    );
+  });
+
   testWidgets('browses albums and opens a track listing', (tester) async {
     final connectionController = createFakeConnectionController();
     final playbackController = FakePlaybackController();
@@ -471,6 +519,24 @@ class FakeJellyfinApi implements JellyfinApi {
     required int startIndex,
     required int limit,
   }) async => const AlbumPage(albums: [album], totalCount: 1);
+
+  @override
+  Future<ArtistPage> getArtists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const ArtistPage(
+    artists: [ArtistSummary(id: 'artist-id', name: 'Real Artist')],
+    totalCount: 1,
+  );
+
+  @override
+  Future<List<AlbumSummary>> getArtistAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String artistId,
+  }) async => const [album];
 
   @override
   Future<List<TrackSummary>> getAlbumTracks({

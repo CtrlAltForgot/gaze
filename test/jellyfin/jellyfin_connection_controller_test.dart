@@ -3,6 +3,7 @@ import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
+import 'package:gaze/library/artist_summary.dart';
 import 'package:gaze/library/library_search_results.dart';
 import 'package:gaze/library/track_lyrics.dart';
 import 'package:gaze/library/track_summary.dart';
@@ -231,6 +232,21 @@ class RecordingJellyfinApi implements JellyfinApi {
   }) async => const AlbumPage(albums: [], totalCount: 0);
 
   @override
+  Future<ArtistPage> getArtists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const ArtistPage(artists: [], totalCount: 0);
+
+  @override
+  Future<List<AlbumSummary>> getArtistAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String artistId,
+  }) async => const [];
+
+  @override
   Future<List<TrackSummary>> getAlbumTracks({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -331,6 +347,21 @@ class FailingJellyfinApi implements JellyfinApi {
     required int startIndex,
     required int limit,
   }) async => const AlbumPage(albums: [], totalCount: 0);
+
+  @override
+  Future<ArtistPage> getArtists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => throw error;
+
+  @override
+  Future<List<AlbumSummary>> getArtistAlbums({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String artistId,
+  }) async => throw error;
 
   @override
   Future<List<TrackSummary>> getAlbumTracks({

@@ -318,6 +318,78 @@ void main() {
       api.close();
     });
 
+    test('loads a paged alphabetical artist library', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/Artists');
+        expect(request.url.queryParameters['UserId'], 'user-id');
+        expect(request.url.queryParameters['SortBy'], 'SortName');
+        expect(request.url.queryParameters['StartIndex'], '48');
+        expect(request.url.queryParameters['Limit'], '48');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {'Id': 'artist-id', 'Name': 'Real Artist'},
+            ],
+            'TotalRecordCount': 97,
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final page = await api.getArtists(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        startIndex: 48,
+        limit: 48,
+      );
+
+      expect(page.totalCount, 97);
+      expect(page.artists.single.name, 'Real Artist');
+      api.close();
+    });
+
+    test('loads albums belonging to one album artist', () async {
+      final client = MockClient((request) async {
+        expect(request.url.path, '/Users/user-id/Items');
+        expect(request.url.queryParameters['IncludeItemTypes'], 'MusicAlbum');
+        expect(request.url.queryParameters['AlbumArtistIds'], 'artist-id');
+        return http.Response(
+          jsonEncode({
+            'Items': [
+              {
+                'Id': 'album-id',
+                'Name': 'Artist Album',
+                'AlbumArtist': 'Real Artist',
+                'ProductionYear': 2025,
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final api = _createApi(client);
+
+      final albums = await api.getArtistAlbums(
+        address: JellyfinServerAddress.parse('https://music.example'),
+        session: const JellyfinSession(
+          accessToken: 'private-access-token',
+          userId: 'user-id',
+          userName: 'listener',
+        ),
+        artistId: 'artist-id',
+      );
+
+      expect(albums.single.title, 'Artist Album');
+      expect(albums.single.artist, 'Real Artist');
+      expect(albums.single.year, 2025);
+      api.close();
+    });
+
     test('searches albums and songs with one authenticated request', () async {
       final client = MockClient((request) async {
         expect(request.url.path, '/Users/user-id/Items');
