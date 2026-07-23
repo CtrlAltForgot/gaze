@@ -6,6 +6,7 @@ class AlbumSummary {
     required this.title,
     required this.artist,
     this.year,
+    this.imageTag,
     this.artworkBytes,
   });
 
@@ -13,6 +14,7 @@ class AlbumSummary {
   final String title;
   final String artist;
   final int? year;
+  final String? imageTag;
   final Uint8List? artworkBytes;
 }
 

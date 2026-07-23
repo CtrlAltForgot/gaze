@@ -222,6 +222,7 @@ class HttpJellyfinApi implements JellyfinApi {
           year: value['ProductionYear'] is int
               ? value['ProductionYear'] as int
               : null,
+          imageTag: imageTag is String ? imageTag : null,
           artworkBytes: artwork,
         ),
       );
