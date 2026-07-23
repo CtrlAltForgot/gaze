@@ -41,14 +41,16 @@ class DesktopShell extends StatefulWidget {
 class _DesktopShellState extends State<DesktopShell> {
   List<AlbumSummary> _albums = const [];
   bool _loading = false;
+  bool _offline = false;
   String? _error;
   StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
   StreamSubscription<PlaybackSnapshot>? _playbackSubscription;
   _LibraryDestination _destination = _LibraryDestination.home;
+  AlbumSummary? _albumOpenedFromHome;
   ArtworkPalette _palette = ArtworkPalette.fallback;
   Uint8List? _paletteArtwork;
 
-  bool get _connected => widget.connectionController.state.isConnected;
+  bool get _connected => widget.connectionController.state.canBrowseLibrary;
 
   @override
   void initState() {
@@ -69,11 +71,15 @@ class _DesktopShellState extends State<DesktopShell> {
     if (!mounted) {
       return;
     }
-    if (state.isConnected) {
+    if (state.canBrowseLibrary) {
+      setState(
+        () => _offline = state.status == JellyfinConnectionStatus.offline,
+      );
       _loadAlbums();
     } else {
       setState(() {
         _albums = const [];
+        _offline = false;
         _loading = state.status == JellyfinConnectionStatus.connecting;
         _error = state.errorMessage;
       });
@@ -154,6 +160,15 @@ class _DesktopShellState extends State<DesktopShell> {
     }
   }
 
+  Future<void> _retryConnection() async {
+    await widget.connectionController.reconnect();
+    await _loadAlbums();
+  }
+
+  void _openAlbum(AlbumSummary album) {
+    setState(() => _albumOpenedFromHome = album);
+  }
+
   Future<void> _playAlbum(
     AlbumSummary album,
     List<TrackSummary> tracks,
@@ -222,8 +237,10 @@ class _DesktopShellState extends State<DesktopShell> {
                           _Navigation(
                             compact: compactNavigation,
                             destination: _destination,
-                            onDestinationChanged: (destination) =>
-                                setState(() => _destination = destination),
+                            onDestinationChanged: (destination) => setState(() {
+                              _albumOpenedFromHome = null;
+                              _destination = destination;
+                            }),
                             onOpenJellyfinConnection:
                                 widget.onOpenJellyfinConnection,
                             onOpenPlaybackTest: widget.onOpenPlaybackTest,
@@ -234,22 +251,39 @@ class _DesktopShellState extends State<DesktopShell> {
                             color: Colors.white.withValues(alpha: .16),
                           ),
                           Expanded(
-                            child: switch (_destination) {
-                              _LibraryDestination.home => _HomeContent(
-                                connected: _connected,
-                                loading: _loading,
-                                albums: _albums,
-                                error: _error,
-                                onConnect: widget.onOpenJellyfinConnection,
-                                onRetry: _loadAlbums,
-                              ),
-                              _LibraryDestination.albums => AlbumsPage(
-                                connectionController:
-                                    widget.connectionController,
-                                onConnect: widget.onOpenJellyfinConnection,
-                                onPlayTrack: _playAlbum,
-                              ),
-                            },
+                            child: _albumOpenedFromHome != null
+                                ? AlbumsPage(
+                                    key: ValueKey(_albumOpenedFromHome!.id),
+                                    connectionController:
+                                        widget.connectionController,
+                                    onConnect: widget.onOpenJellyfinConnection,
+                                    onPlayTrack: _playAlbum,
+                                    initialAlbum: _albumOpenedFromHome,
+                                    initialAlbumBackLabel: 'Home',
+                                    onInitialAlbumBack: () => setState(
+                                      () => _albumOpenedFromHome = null,
+                                    ),
+                                  )
+                                : switch (_destination) {
+                                    _LibraryDestination.home => _HomeContent(
+                                      connected: _connected,
+                                      loading: _loading,
+                                      offline: _offline,
+                                      albums: _albums,
+                                      error: _error,
+                                      onConnect:
+                                          widget.onOpenJellyfinConnection,
+                                      onRetry: _retryConnection,
+                                      onOpenAlbum: _openAlbum,
+                                    ),
+                                    _LibraryDestination.albums => AlbumsPage(
+                                      connectionController:
+                                          widget.connectionController,
+                                      onConnect:
+                                          widget.onOpenJellyfinConnection,
+                                      onPlayTrack: _playAlbum,
+                                    ),
+                                  },
                           ),
                         ],
                       ),
@@ -595,18 +629,22 @@ class _HomeContent extends StatelessWidget {
   const _HomeContent({
     required this.connected,
     required this.loading,
+    required this.offline,
     required this.albums,
     required this.error,
     required this.onConnect,
     required this.onRetry,
+    required this.onOpenAlbum,
   });
 
   final bool connected;
   final bool loading;
+  final bool offline;
   final List<AlbumSummary> albums;
   final String? error;
   final VoidCallback onConnect;
   final VoidCallback onRetry;
+  final ValueChanged<AlbumSummary> onOpenAlbum;
 
   @override
   Widget build(BuildContext context) {
@@ -659,6 +697,44 @@ class _HomeContent extends StatelessWidget {
             ),
           ),
         ),
+        if (offline)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              0,
+              GazeSpacing.xLarge,
+              GazeSpacing.medium,
+            ),
+            sliver: SliverToBoxAdapter(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .07),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .14),
+                  ),
+                  borderRadius: BorderRadius.circular(GazeRadii.control),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(GazeSpacing.medium),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_off_outlined, size: 18),
+                      const SizedBox(width: GazeSpacing.small),
+                      const Expanded(
+                        child: Text(
+                          'Offline — showing music saved on this device. Streaming is unavailable.',
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: onRetry,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         if (loading)
           const SliverPadding(
             padding: EdgeInsets.symmetric(vertical: GazeSpacing.xxLarge),
@@ -739,8 +815,10 @@ class _HomeContent extends StatelessWidget {
                     mainAxisSpacing: GazeSpacing.xLarge,
                     childAspectRatio: 0.78,
                   ),
-                  itemBuilder: (context, index) =>
-                      _AlbumCard(album: albums[index]),
+                  itemBuilder: (context, index) => _AlbumCard(
+                    album: albums[index],
+                    onTap: () => onOpenAlbum(albums[index]),
+                  ),
                 );
               },
             ),
@@ -751,9 +829,10 @@ class _HomeContent extends StatelessWidget {
 }
 
 class _AlbumCard extends StatelessWidget {
-  const _AlbumCard({required this.album});
+  const _AlbumCard({required this.album, required this.onTap});
 
   final AlbumSummary album;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -761,7 +840,7 @@ class _AlbumCard extends StatelessWidget {
       button: true,
       label: '${album.title} by ${album.artist}',
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         borderRadius: BorderRadius.circular(GazeRadii.card),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

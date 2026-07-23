@@ -9,7 +9,13 @@ import 'jellyfin_credential_store.dart';
 
 typedef JellyfinApiFactory = JellyfinApi Function(String deviceId);
 
-enum JellyfinConnectionStatus { idle, connecting, connected, disconnecting }
+enum JellyfinConnectionStatus {
+  idle,
+  connecting,
+  connected,
+  offline,
+  disconnecting,
+}
 
 class JellyfinConnectionState {
   const JellyfinConnectionState({
@@ -27,6 +33,8 @@ class JellyfinConnectionState {
   final String? errorMessage;
 
   bool get isConnected => status == JellyfinConnectionStatus.connected;
+  bool get canBrowseLibrary =>
+      isConnected || status == JellyfinConnectionStatus.offline;
 }
 
 class JellyfinConnectionController {
@@ -88,6 +96,9 @@ class JellyfinConnectionController {
             accessToken: session.accessToken,
             userId: session.userId,
             userName: session.userName,
+            serverId: serverInfo.id,
+            serverName: serverInfo.name,
+            serverVersion: serverInfo.version,
           ),
         );
         await _credentialStore.writeProfile(
@@ -130,24 +141,42 @@ class JellyfinConnectionController {
         status: JellyfinConnectionStatus.connecting,
       ),
     );
+    SavedJellyfinConnection? saved;
+    JellyfinServerAddress? address;
+    JellyfinSession? session;
     try {
-      final saved = await _credentialStore.readConnection();
+      saved = await _credentialStore.readConnection();
       if (saved == null) {
         _emit(const JellyfinConnectionState());
         return;
       }
-      final address = JellyfinServerAddress.parse(saved.serverAddress);
+      address = JellyfinServerAddress.parse(saved.serverAddress);
       final deviceId = await _credentialStore.getOrCreateDeviceId();
       final api = _apiFactory(deviceId);
       _api?.close();
       _api = api;
-      final session = JellyfinSession(
+      session = JellyfinSession(
         accessToken: saved.accessToken,
         userId: saved.userId,
         userName: saved.userName,
       );
       final serverInfo = await api.getPublicServerInfo(address);
       await api.validateSession(address: address, session: session);
+      try {
+        await _credentialStore.writeConnection(
+          SavedJellyfinConnection(
+            serverAddress: address.toString(),
+            accessToken: session.accessToken,
+            userId: session.userId,
+            userName: session.userName,
+            serverId: serverInfo.id,
+            serverName: serverInfo.name,
+            serverVersion: serverInfo.version,
+          ),
+        );
+      } catch (_) {
+        // Identity enrichment is optional after a valid session is restored.
+      }
       _emit(
         JellyfinConnectionState(
           status: JellyfinConnectionStatus.connected,
@@ -157,8 +186,29 @@ class JellyfinConnectionController {
         ),
       );
     } on JellyfinConnectionException catch (error) {
-      await _credentialStore.deleteConnection();
-      _emit(JellyfinConnectionState(errorMessage: error.message));
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _credentialStore.deleteConnection();
+        _emit(JellyfinConnectionState(errorMessage: error.message));
+      } else if (saved?.serverId != null &&
+          address != null &&
+          session != null) {
+        _emit(
+          JellyfinConnectionState(
+            status: JellyfinConnectionStatus.offline,
+            serverAddress: address,
+            serverInfo: JellyfinServerInfo(
+              id: saved!.serverId!,
+              name: saved.serverName ?? 'Saved Jellyfin server',
+              version: saved.serverVersion ?? 'unknown',
+            ),
+            session: session,
+            errorMessage:
+                'Jellyfin is unavailable. Showing saved library data.',
+          ),
+        );
+      } else {
+        _emit(JellyfinConnectionState(errorMessage: error.message));
+      }
     } catch (_) {
       _emit(
         const JellyfinConnectionState(
@@ -196,13 +246,53 @@ class JellyfinConnectionController {
     }
   }
 
+  Future<void> reconnect() async {
+    if (_state.status != JellyfinConnectionStatus.offline) {
+      return;
+    }
+    final api = _api;
+    final address = _state.serverAddress;
+    final session = _state.session;
+    if (api == null || address == null || session == null) {
+      return;
+    }
+    try {
+      final serverInfo = await api.getPublicServerInfo(address);
+      await api.validateSession(address: address, session: session);
+      _emit(
+        JellyfinConnectionState(
+          status: JellyfinConnectionStatus.connected,
+          serverAddress: address,
+          serverInfo: serverInfo,
+          session: session,
+        ),
+      );
+    } on JellyfinConnectionException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await _credentialStore.deleteConnection();
+        _emit(JellyfinConnectionState(errorMessage: error.message));
+      } else {
+        _emit(
+          JellyfinConnectionState(
+            status: JellyfinConnectionStatus.offline,
+            serverAddress: address,
+            serverInfo: _state.serverInfo,
+            session: session,
+            errorMessage:
+                'Jellyfin is still unavailable. Showing saved library data.',
+          ),
+        );
+      }
+    }
+  }
+
   Future<List<AlbumSummary>> loadRecentlyAddedAlbums({int limit = 10}) async {
-    final (:api, :address, :session) = _requireConnection();
-    return api.getRecentlyAddedAlbums(
-      address: address,
-      session: session,
+    final page = await loadAlbums(
+      sort: AlbumSort.recentlyAdded,
+      startIndex: 0,
       limit: limit,
     );
+    return page.albums;
   }
 
   Future<AlbumPage> loadAlbums({
@@ -210,7 +300,17 @@ class JellyfinConnectionController {
     required int startIndex,
     int limit = 24,
   }) async {
-    final (:api, :address, :session) = _requireConnection();
+    final api = _api;
+    final address = _state.serverAddress;
+    final session = _state.session;
+    if (!_state.canBrowseLibrary ||
+        api == null ||
+        address == null ||
+        session == null) {
+      throw const JellyfinConnectionException(
+        'Connect to Jellyfin before browsing albums.',
+      );
+    }
     final serverId = _state.serverInfo!.id;
     final key = AlbumPageCacheKey(
       serverId: serverId,
@@ -226,7 +326,19 @@ class JellyfinConnectionController {
       // Cache availability must not block the live Jellyfin library.
     }
     if (cached != null && cached.isFreshAt(DateTime.now())) {
-      return _hydrateCachedArtwork(cached, address, stale: false);
+      return _hydrateCachedArtwork(
+        cached,
+        address,
+        stale: _state.status == JellyfinConnectionStatus.offline,
+      );
+    }
+    if (_state.status == JellyfinConnectionStatus.offline) {
+      if (cached == null) {
+        throw const JellyfinConnectionException(
+          'This part of the library has not been saved on this device.',
+        );
+      }
+      return _hydrateCachedArtwork(cached, address, stale: true);
     }
     try {
       final page = await api.getAlbums(

@@ -4,6 +4,8 @@ import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
 import 'package:gaze/jellyfin/jellyfin_credential_store.dart';
 import 'package:gaze/library/album_summary.dart';
 import 'package:gaze/library/track_summary.dart';
+import 'package:gaze/storage/library_metadata_cache.dart';
+import 'package:gaze/storage/sqlite_library_metadata_cache.dart';
 
 void main() {
   test('connects and saves only the returned access token', () async {
@@ -86,6 +88,80 @@ void main() {
 
     expect(controller.state.isConnected, isFalse);
     expect(controller.state.errorMessage, 'Could not reach the test server.');
+    expect(credentials.accessToken, isNull);
+    await controller.dispose();
+  });
+
+  test('restores cached library access when the server is offline', () async {
+    final credentials = MemoryCredentialStore()
+      ..connection = const SavedJellyfinConnection(
+        serverAddress: 'http://music.local:8096',
+        accessToken: 'saved-token',
+        userId: 'test-user-id',
+        userName: 'listener',
+        serverId: 'test-server-id',
+        serverName: 'Music Server',
+        serverVersion: '10.11.0',
+      );
+    final metadata = SqliteLibraryMetadataCache.inMemory();
+    await metadata.writeAlbumPage(
+      const AlbumPageCacheKey(
+        serverId: 'test-server-id',
+        userId: 'test-user-id',
+        sort: AlbumSort.title,
+        startIndex: 0,
+        limit: 24,
+      ),
+      const AlbumPage(
+        albums: [
+          AlbumSummary(id: 'album', title: 'Saved Album', artist: 'Artist'),
+        ],
+        totalCount: 1,
+      ),
+    );
+    final controller = JellyfinConnectionController(
+      credentialStore: credentials,
+      metadataCache: metadata,
+      apiFactory: (_) => FailingJellyfinApi(),
+    );
+
+    await controller.restore();
+    final page = await controller.loadAlbums(
+      sort: AlbumSort.title,
+      startIndex: 0,
+    );
+
+    expect(controller.state.status, JellyfinConnectionStatus.offline);
+    expect(controller.state.canBrowseLibrary, isTrue);
+    expect(credentials.accessToken, 'saved-token');
+    expect(page.albums.single.title, 'Saved Album');
+    expect(page.isStale, isTrue);
+    await controller.dispose();
+    await metadata.close();
+  });
+
+  test('removes a saved session after an authentication rejection', () async {
+    final credentials = MemoryCredentialStore()
+      ..connection = const SavedJellyfinConnection(
+        serverAddress: 'http://music.local:8096',
+        accessToken: 'expired-token',
+        userId: 'test-user-id',
+        userName: 'listener',
+        serverId: 'test-server-id',
+      );
+    final controller = JellyfinConnectionController(
+      credentialStore: credentials,
+      apiFactory: (_) => FailingJellyfinApi(
+        error: const JellyfinConnectionException(
+          'Session expired.',
+          statusCode: 401,
+        ),
+      ),
+    );
+
+    await controller.restore();
+
+    expect(controller.state.canBrowseLibrary, isFalse);
     expect(credentials.accessToken, isNull);
     await controller.dispose();
   });
@@ -202,6 +278,13 @@ class RecordingJellyfinApi implements JellyfinApi {
 }
 
 class FailingJellyfinApi implements JellyfinApi {
+  FailingJellyfinApi({
+    this.error = const JellyfinConnectionException(
+      'Could not reach the test server.',
+    ),
+  });
+
+  final JellyfinConnectionException error;
   @override
   Future<void> reportPlayback({
     required JellyfinServerAddress address,
@@ -262,7 +345,7 @@ class FailingJellyfinApi implements JellyfinApi {
   Future<JellyfinServerInfo> getPublicServerInfo(
     JellyfinServerAddress address,
   ) {
-    throw const JellyfinConnectionException('Could not reach the test server.');
+    throw error;
   }
 
   @override

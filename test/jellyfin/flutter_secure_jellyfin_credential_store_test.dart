@@ -25,6 +25,9 @@ void main() {
       accessToken: 'test-token',
       userId: 'user-id',
       userName: 'listener',
+      serverId: 'server-id',
+      serverName: 'Music Server',
+      serverVersion: '10.11.0',
     );
 
     expect(await store.readConnection(), isNull);
@@ -40,6 +43,9 @@ void main() {
     expect(restored?.accessToken, connection.accessToken);
     expect(restored?.userId, connection.userId);
     expect(restored?.userName, connection.userName);
+    expect(restored?.serverId, connection.serverId);
+    expect(restored?.serverName, connection.serverName);
+    expect(restored?.serverVersion, connection.serverVersion);
     final profile = await store.readProfile();
     expect(profile?.serverAddress, connection.serverAddress);
     expect(profile?.userName, connection.userName);

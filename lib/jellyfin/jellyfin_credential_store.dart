@@ -4,12 +4,18 @@ class SavedJellyfinConnection {
     required this.accessToken,
     required this.userId,
     required this.userName,
+    this.serverId,
+    this.serverName,
+    this.serverVersion,
   });
 
   final String serverAddress;
   final String accessToken;
   final String userId;
   final String userName;
+  final String? serverId;
+  final String? serverName;
+  final String? serverVersion;
 }
 
 class SavedJellyfinProfile {

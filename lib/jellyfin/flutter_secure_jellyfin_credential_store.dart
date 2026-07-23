@@ -48,6 +48,9 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
       final accessToken = value['accessToken'];
       final userId = value['userId'];
       final userName = value['userName'];
+      final serverId = value['serverId'];
+      final serverName = value['serverName'];
+      final serverVersion = value['serverVersion'];
       if (serverAddress is! String ||
           accessToken is! String ||
           userId is! String ||
@@ -63,6 +66,13 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
         accessToken: accessToken,
         userId: userId,
         userName: userName,
+        serverId: serverId is String && serverId.isNotEmpty ? serverId : null,
+        serverName: serverName is String && serverName.isNotEmpty
+            ? serverName
+            : null,
+        serverVersion: serverVersion is String && serverVersion.isNotEmpty
+            ? serverVersion
+            : null,
       );
     } on FormatException {
       return null;
@@ -106,6 +116,9 @@ class FlutterSecureJellyfinCredentialStore implements JellyfinCredentialStore {
         'accessToken': connection.accessToken,
         'userId': connection.userId,
         'userName': connection.userName,
+        'serverId': connection.serverId,
+        'serverName': connection.serverName,
+        'serverVersion': connection.serverVersion,
       }),
     );
     try {

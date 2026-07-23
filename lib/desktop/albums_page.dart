@@ -10,11 +10,17 @@ class AlbumsPage extends StatefulWidget {
     required this.connectionController,
     required this.onConnect,
     required this.onPlayTrack,
+    this.initialAlbum,
+    this.initialAlbumBackLabel = 'All albums',
+    this.onInitialAlbumBack,
     super.key,
   });
 
   final JellyfinConnectionController connectionController;
   final VoidCallback onConnect;
+  final AlbumSummary? initialAlbum;
+  final String initialAlbumBackLabel;
+  final VoidCallback? onInitialAlbumBack;
   final Future<void> Function(
     AlbumSummary album,
     List<TrackSummary> tracks,
@@ -41,14 +47,15 @@ class _AlbumsPageState extends State<AlbumsPage> {
   String? _error;
   AlbumSummary? _selectedAlbum;
 
-  bool get _connected => widget.connectionController.state.isConnected;
+  bool get _connected => widget.connectionController.state.canBrowseLibrary;
   bool get _hasMore => _albums.length < _totalCount;
 
   @override
   void initState() {
     super.initState();
+    _selectedAlbum = widget.initialAlbum;
     _scrollController.addListener(_loadAhead);
-    if (_connected) {
+    if (_connected && _selectedAlbum == null) {
       _loadFirstPage();
     }
   }
@@ -153,6 +160,11 @@ class _AlbumsPageState extends State<AlbumsPage> {
     _loadFirstPage();
   }
 
+  Future<void> _retryConnection() async {
+    await widget.connectionController.reconnect();
+    await _loadFirstPage();
+  }
+
   @override
   Widget build(BuildContext context) {
     final album = _selectedAlbum;
@@ -162,7 +174,13 @@ class _AlbumsPageState extends State<AlbumsPage> {
         connectionController: widget.connectionController,
         onPlayTrack: (tracks, index) =>
             widget.onPlayTrack(album, tracks, index),
-        onBack: () => setState(() => _selectedAlbum = null),
+        backLabel: widget.initialAlbum == album
+            ? widget.initialAlbumBackLabel
+            : 'All albums',
+        onBack:
+            widget.initialAlbum == album && widget.onInitialAlbumBack != null
+            ? widget.onInitialAlbumBack!
+            : () => setState(() => _selectedAlbum = null),
       );
     }
     return Column(
@@ -242,7 +260,7 @@ class _AlbumsPageState extends State<AlbumsPage> {
                       ),
                     ),
                     TextButton(
-                      onPressed: _loadFirstPage,
+                      onPressed: _retryConnection,
                       child: const Text('Retry'),
                     ),
                   ],
@@ -400,12 +418,14 @@ class _AlbumDetail extends StatefulWidget {
     required this.connectionController,
     required this.onBack,
     required this.onPlayTrack,
+    required this.backLabel,
   });
 
   final AlbumSummary album;
   final JellyfinConnectionController connectionController;
   final VoidCallback onBack;
   final Future<void> Function(List<TrackSummary> tracks, int index) onPlayTrack;
+  final String backLabel;
 
   @override
   State<_AlbumDetail> createState() => _AlbumDetailState();
@@ -450,7 +470,7 @@ class _AlbumDetailState extends State<_AlbumDetail> {
                 TextButton.icon(
                   onPressed: widget.onBack,
                   icon: const Icon(Icons.arrow_back_rounded),
-                  label: const Text('All albums'),
+                  label: Text(widget.backLabel),
                 ),
                 const SizedBox(height: GazeSpacing.medium),
                 Row(
@@ -565,15 +585,9 @@ class _TrackRowState extends State<_TrackRow> {
           onTap: widget.onPlay,
           leading: SizedBox(
             width: 32,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 60),
-              child: showPlay
-                  ? const Icon(Icons.play_arrow_rounded, key: ValueKey('play'))
-                  : Text(
-                      '${widget.displayNumber}',
-                      key: const ValueKey('number'),
-                    ),
-            ),
+            child: showPlay
+                ? const Icon(Icons.play_arrow_rounded, key: ValueKey('play'))
+                : Text('${widget.displayNumber}'),
           ),
           title: Text(widget.track.title),
           subtitle: Text(widget.track.artist),

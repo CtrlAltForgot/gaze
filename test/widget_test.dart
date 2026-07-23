@@ -126,6 +126,51 @@ void main() {
     expect(find.text('Northern Lines'), findsNothing);
   });
 
+  testWidgets('opens a recently added album and plays one of its tracks', (
+    tester,
+  ) async {
+    final connectionController = createFakeConnectionController();
+    final playbackController = FakePlaybackController();
+    await connectionController.connect(
+      serverAddress: 'http://music.local:8096',
+      userName: 'listener',
+      password: 'temporary-password',
+    );
+
+    await tester.pumpWidget(
+      GazeApp(
+        playbackController: playbackController,
+        connectionController: connectionController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final homeAlbum = find.text('Real Album');
+    await tester.ensureVisible(homeAlbum);
+    await tester.pumpAndSettle();
+    await tester.tap(homeAlbum);
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextButton, 'Home'), findsOneWidget);
+    expect(find.text('Real Track'), findsOneWidget);
+
+    await tester.tap(find.text('Real Track'));
+    await tester.pumpAndSettle();
+
+    expect(playbackController.loadedRemoteSource?.title, 'Real Track');
+    expect(
+      playbackController.loadedRemoteSource?.headers['Authorization'],
+      'test-auth-header',
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Home'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your music, brought forward.'), findsOneWidget);
+    expect(find.text('Recently added'), findsOneWidget);
+    expect(find.text('Real Album'), findsOneWidget);
+  });
+
   testWidgets('browses albums and opens a track listing', (tester) async {
     final connectionController = createFakeConnectionController();
     final playbackController = FakePlaybackController();
