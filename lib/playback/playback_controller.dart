@@ -7,6 +7,7 @@ class RemotePlaybackSource {
     required this.title,
     required this.artist,
     this.itemId,
+    this.startPosition = Duration.zero,
     this.headers = const {},
     this.artworkBytes,
   });
@@ -16,6 +17,7 @@ class RemotePlaybackSource {
   final String title;
   final String artist;
   final String? itemId;
+  final Duration startPosition;
   final Uint8List? artworkBytes;
 }
 

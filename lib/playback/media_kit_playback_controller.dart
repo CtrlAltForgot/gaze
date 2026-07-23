@@ -102,11 +102,18 @@ class MediaKitPlaybackController implements PlaybackController {
         artist: source.artist,
         artworkBytes: source.artworkBytes,
         itemId: source.itemId,
+        position: source.startPosition,
       ),
     );
     await _run(() async {
       await _player.open(
-        Media(url.toString(), httpHeaders: source.headers),
+        Media(
+          url.toString(),
+          httpHeaders: source.headers,
+          start: source.startPosition > Duration.zero
+              ? source.startPosition
+              : null,
+        ),
         play: false,
       );
       _emit(_state.copyWith(status: PlaybackStatus.ready, clearError: true));

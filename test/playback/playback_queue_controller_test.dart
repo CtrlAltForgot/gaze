@@ -42,6 +42,34 @@ void main() {
     await queue.dispose();
     await playback.dispose();
   });
+
+  test('restores a queue paused at its saved position and volume', () async {
+    final playback = QueueTestPlaybackController();
+    final queue = PlaybackQueueController(playbackController: playback);
+
+    await queue.restore(
+      [
+        _source('One'),
+        RemotePlaybackSource(
+          uri: Uri.parse('https://music.example/Two'),
+          title: 'Two',
+          artist: 'Artist',
+          startPosition: const Duration(seconds: 42),
+        ),
+      ],
+      currentIndex: 1,
+      volume: 0.65,
+    );
+
+    expect(playback.loadedTitles, ['Two']);
+    expect(playback.playCalls, 0);
+    expect(playback.loadedStartPositions, [const Duration(seconds: 42)]);
+    expect(playback.volumes, [0.65]);
+    expect(queue.state.currentIndex, 1);
+
+    await queue.dispose();
+    await playback.dispose();
+  });
 }
 
 RemotePlaybackSource _source(String title) => RemotePlaybackSource(
@@ -54,6 +82,10 @@ class QueueTestPlaybackController implements PlaybackController {
   final StreamController<PlaybackSnapshot> _states =
       StreamController<PlaybackSnapshot>.broadcast();
   final List<String> loadedTitles = [];
+  final List<Duration> loadedStartPositions = [];
+  final List<Duration> seekPositions = [];
+  final List<double> volumes = [];
+  int playCalls = 0;
   PlaybackSnapshot _state = const PlaybackSnapshot();
 
   void emitCompleted() {
@@ -70,6 +102,7 @@ class QueueTestPlaybackController implements PlaybackController {
   @override
   Future<void> loadRemoteSource(RemotePlaybackSource source) async {
     loadedTitles.add(source.title);
+    loadedStartPositions.add(source.startPosition);
     _state = PlaybackSnapshot(
       status: PlaybackStatus.ready,
       title: source.title,
@@ -88,13 +121,19 @@ class QueueTestPlaybackController implements PlaybackController {
   Future<void> pause() async {}
 
   @override
-  Future<void> play() async {}
+  Future<void> play() async {
+    playCalls++;
+  }
 
   @override
-  Future<void> seek(Duration position) async {}
+  Future<void> seek(Duration position) async {
+    seekPositions.add(position);
+  }
 
   @override
-  Future<void> setVolume(double volume) async {}
+  Future<void> setVolume(double volume) async {
+    volumes.add(volume);
+  }
 
   @override
   Future<void> stop() async {}

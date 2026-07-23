@@ -21,7 +21,7 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 - **Complete on Linux:** Albums navigation, server-side sorting, automatic bounded pagination, and read-only album track listings passed real-library visual and interaction review. Login persistence was hardened after real keyring feedback, and the non-secret server/username profile remains available for reconnection.
 - **Complete on Linux:** authenticated direct play, track selection, the functional player bar, fast hover/focus play actions, and a temporary album queue with previous, next, and completion advancement passed manual playback and visual review.
 - **Complete on Linux:** Jellyfin playback start, throttled progress, pause, completion, track-change, and stop reporting are implemented without coupling server calls to widgets or media-kit. The user confirmed that gaze playback appears in the real Jellyfin server activity view.
-- **Next:** Phase 6, beginning with durable queue and playback-state restoration before expanding the cache or deeper library interface.
+- **Active:** Phase 6 now has a versioned SQLite foundation and conservative queue/playback restoration awaiting manual restart validation on Linux. Artwork and metadata caching remain separate later slices.
 
 Do not skip directly to a complete Home page or full Jellyfin client. Each milestone should produce one understandable, testable slice.
 
@@ -134,6 +134,8 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 ## Phase 6 — durable queue and caches
 
 **Goal:** resume reliably and stay responsive with a larger library.
+
+**Current status:** the first persistence slice uses `sqlite3` 3.x with bundled native SQLite and Flutter's official `path_provider`. Queue items, current index, position, and volume are replaced atomically in a versioned database. Snapshots are scoped to the Jellyfin server and user, contain item IDs and ordinary display metadata only, and never store access tokens, authorization headers, or private stream URLs. After the saved Jellyfin session reconnects, gaze regenerates authenticated sources and restores the current track paused at its last recent position. Automated migration, round-trip, replacement, clearing, and no-autoplay restoration checks pass; Linux restart behavior still requires manual validation.
 
 - Choose and migrate a local SQLite schema for queue, playback position, preferences, and indexed metadata.
 - Persist queue edits atomically and restore conservatively after an unclean exit.

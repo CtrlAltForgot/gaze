@@ -51,6 +51,25 @@ class PlaybackQueueController {
     await _openCurrent();
   }
 
+  Future<void> restore(
+    List<RemotePlaybackSource> items, {
+    required int currentIndex,
+    required double volume,
+  }) async {
+    if (items.isEmpty || currentIndex < 0 || currentIndex >= items.length) {
+      return;
+    }
+    _emit(
+      PlaybackQueueState(
+        items: List.unmodifiable(items),
+        currentIndex: currentIndex,
+      ),
+    );
+    _completionHandled = false;
+    await _playbackController.loadRemoteSource(items[currentIndex]);
+    await _playbackController.setVolume(volume.clamp(0, 1));
+  }
+
   Future<void> previous() async {
     if (!_state.hasPrevious) {
       return;

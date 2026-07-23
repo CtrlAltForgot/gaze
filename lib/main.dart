@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 
 import 'application/jellyfin_playback_reporter.dart';
+import 'application/playback_state_coordinator.dart';
 import 'design/gaze_theme.dart';
 import 'desktop/desktop_shell.dart';
 import 'jellyfin/flutter_secure_jellyfin_credential_store.dart';
@@ -16,10 +17,18 @@ import 'playback/media_kit_playback_controller.dart';
 import 'playback/playback_controller.dart';
 import 'playback/playback_test_screen.dart';
 import 'playback/playback_queue_controller.dart';
+import 'storage/playback_state_store.dart';
+import 'storage/sqlite_playback_state_store.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  PlaybackStateStore playbackStateStore;
+  try {
+    playbackStateStore = await SqlitePlaybackStateStore.open();
+  } catch (_) {
+    playbackStateStore = const DisabledPlaybackStateStore();
+  }
   final credentialStore = const FlutterSecureJellyfinCredentialStore();
   final connectionController = JellyfinConnectionController(
     credentialStore: credentialStore,
@@ -32,6 +41,7 @@ void main() {
     GazeApp(
       playbackController: MediaKitPlaybackController(),
       connectionController: connectionController,
+      playbackStateStore: playbackStateStore,
     ),
   );
   unawaited(connectionController.restore());
@@ -41,11 +51,13 @@ class GazeApp extends StatefulWidget {
   const GazeApp({
     required this.playbackController,
     required this.connectionController,
+    this.playbackStateStore = const DisabledPlaybackStateStore(),
     super.key,
   });
 
   final PlaybackController playbackController;
   final JellyfinConnectionController connectionController;
+  final PlaybackStateStore playbackStateStore;
 
   @override
   State<GazeApp> createState() => _GazeAppState();
@@ -59,6 +71,7 @@ class _GazeAppState extends State<GazeApp> {
     playbackController: widget.playbackController,
   );
   late final JellyfinPlaybackReporter _playbackReporter;
+  late final PlaybackStateCoordinator _playbackStateCoordinator;
 
   @override
   void initState() {
@@ -67,11 +80,18 @@ class _GazeAppState extends State<GazeApp> {
       playbackController: widget.playbackController,
       connectionController: widget.connectionController,
     );
+    _playbackStateCoordinator = PlaybackStateCoordinator(
+      playbackController: widget.playbackController,
+      queueController: _queueController,
+      connectionController: widget.connectionController,
+      store: widget.playbackStateStore,
+    );
   }
 
   @override
   void dispose() {
     unawaited(_playbackReporter.dispose());
+    unawaited(_playbackStateCoordinator.dispose());
     unawaited(_queueController.dispose());
     unawaited(widget.playbackController.dispose());
     unawaited(widget.connectionController.dispose());
