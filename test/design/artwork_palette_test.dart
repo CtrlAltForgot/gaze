@@ -48,6 +48,30 @@ void main() {
     );
   });
 
+  test('preserves relative color presence for ambient composition', () {
+    final palette = deriveArtworkPalette([
+      ...List.filled(60, const Color(0xFF2448C8)),
+      ...List.filled(35, const Color(0xFF792A9D)),
+      ...List.filled(5, const Color(0xFFD52E35)),
+    ]);
+    final redEntries = palette.background.indexed.where((entry) {
+      final hue = HSVColor.fromColor(entry.$2).hue;
+      return hue <= 18 || hue >= 342;
+    });
+
+    expect(redEntries, isNotEmpty);
+    expect(
+      redEntries
+          .map((entry) => palette.backgroundWeights[entry.$1])
+          .reduce((a, b) => a + b),
+      lessThan(.1),
+    );
+    expect(
+      palette.backgroundWeights.reduce((a, b) => a + b),
+      closeTo(1, .0001),
+    );
+  });
+
   test('uses a stable fallback without artwork samples', () {
     expect(
       deriveArtworkPalette(const []).accent,

@@ -4,7 +4,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 class ArtworkPalette {
-  const ArtworkPalette({required this.accent, required this.background});
+  const ArtworkPalette({
+    required this.accent,
+    required this.background,
+    required this.backgroundWeights,
+  });
 
   static const fallback = ArtworkPalette(
     accent: Color(0xFFB78CFF),
@@ -14,10 +18,12 @@ class ArtworkPalette {
       Color(0xFF30213A),
       Color(0xFF241F30),
     ],
+    backgroundWeights: [.42, .28, .18, .12],
   );
 
   final Color accent;
   final List<Color> background;
+  final List<double> backgroundWeights;
 }
 
 Future<ArtworkPalette> extractArtworkPalette(Uint8List bytes) async {
@@ -118,6 +124,7 @@ ArtworkPalette deriveArtworkPalette(List<Color> samples) {
             .toColor();
 
   final background = <Color>[];
+  final backgroundWeights = <double>[];
   for (final candidate in candidates) {
     final hsv = HSVColor.fromColor(candidate.color);
     final fitted = hsv
@@ -128,6 +135,7 @@ ArtworkPalette deriveArtworkPalette(List<Color> samples) {
       (existing) => (HSVColor.fromColor(existing).hue - hsv.hue).abs() > 18,
     )) {
       background.add(fitted);
+      backgroundWeights.add(candidate.population);
     }
     if (background.length == 4) {
       break;
@@ -137,6 +145,19 @@ ArtworkPalette deriveArtworkPalette(List<Color> samples) {
     background.add(
       background.isEmpty ? const Color(0xFF242833) : background[0],
     );
+    backgroundWeights.add(0);
   }
-  return ArtworkPalette(accent: accent, background: background);
+  final selectedTotal = backgroundWeights.fold<double>(
+    0,
+    (sum, weight) => sum + weight,
+  );
+  return ArtworkPalette(
+    accent: accent,
+    background: background,
+    backgroundWeights: selectedTotal <= 0
+        ? const [.25, .25, .25, .25]
+        : backgroundWeights
+              .map((weight) => weight / selectedTotal)
+              .toList(growable: false),
+  );
 }

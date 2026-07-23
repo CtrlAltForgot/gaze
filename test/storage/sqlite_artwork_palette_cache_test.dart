@@ -10,6 +10,7 @@ void main() {
     const palette = StoredArtworkPalette(
       accentArgb: 0xFFCC3355,
       backgroundArgb: [0xFF221122, 0xFF332233, 0xFF443344, 0xFF554455],
+      backgroundWeights: [.5, .25, .15, .1],
     );
 
     await cache.write('artwork-one', palette);
@@ -18,6 +19,7 @@ void main() {
     expect(restored, isNotNull);
     expect(restored!.accentArgb, palette.accentArgb);
     expect(restored.backgroundArgb, palette.backgroundArgb);
+    expect(restored.backgroundWeights, palette.backgroundWeights);
     expect(await cache.read('artwork-two'), isNull);
     await cache.close();
   });
@@ -40,6 +42,7 @@ void main() {
         const StoredArtworkPalette(
           accentArgb: 0xFFFFFFFF,
           backgroundArgb: [0xFF000000],
+          backgroundWeights: [1],
         ),
       ),
       throwsArgumentError,

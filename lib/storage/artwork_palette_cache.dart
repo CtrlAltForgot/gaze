@@ -4,10 +4,12 @@ class StoredArtworkPalette {
   const StoredArtworkPalette({
     required this.accentArgb,
     required this.backgroundArgb,
+    required this.backgroundWeights,
   });
 
   final int accentArgb;
   final List<int> backgroundArgb;
+  final List<double> backgroundWeights;
 }
 
 abstract interface class ArtworkPaletteCache {

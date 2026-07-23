@@ -18,6 +18,7 @@ The interface should explain itself through hierarchy, placement, feedback, and 
 
 - Artwork is the strongest color and emotional signal. Present it sharply, preserve its proportions, and avoid covering important imagery with controls.
 - Use artwork-derived color as a restrained atmosphere—gradients, soft fields, or accents—while maintaining predictable contrast and readable text.
+- Preserve the artwork's approximate color proportions in that atmosphere: dominant colors should own most of the field, while small details remain small moving accents rather than taking over the interface.
 - Establish a neutral foundation with a small semantic accent system. Avoid a permanently loud interface that competes with album art.
 - Use typography to make page identity, metadata, actions, and supporting information immediately distinguishable. Track tables remain readable at desktop density.
 - Use consistent spacing, corner shapes, dividers, overlays, and elevation. Every exception needs a functional reason.

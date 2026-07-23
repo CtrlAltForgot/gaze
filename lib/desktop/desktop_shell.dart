@@ -103,6 +103,7 @@ class _DesktopShellState extends State<DesktopShell> {
           background: stored.backgroundArgb
               .map(Color.new)
               .toList(growable: false),
+          backgroundWeights: stored.backgroundWeights,
         );
       }
     } catch (_) {
@@ -118,6 +119,7 @@ class _DesktopShellState extends State<DesktopShell> {
             backgroundArgb: resolvedPalette.background
                 .map((color) => color.toARGB32())
                 .toList(growable: false),
+            backgroundWeights: resolvedPalette.backgroundWeights,
           ),
         );
       } catch (_) {
@@ -201,6 +203,7 @@ class _DesktopShellState extends State<DesktopShell> {
                     _palette.background.map((color) => color.toARGB32()).join(),
                   ),
                   colors: _palette.background,
+                  weights: _palette.backgroundWeights,
                   animate:
                       _paletteArtwork != null &&
                       !MediaQuery.disableAnimationsOf(context),
@@ -269,11 +272,13 @@ class _DesktopShellState extends State<DesktopShell> {
 class _AmbientArtworkBackground extends StatefulWidget {
   const _AmbientArtworkBackground({
     required this.colors,
+    required this.weights,
     required this.animate,
     super.key,
   });
 
   final List<Color> colors;
+  final List<double> weights;
   final bool animate;
 
   @override
@@ -324,6 +329,7 @@ class _AmbientArtworkBackgroundState extends State<_AmbientArtworkBackground>
       child: CustomPaint(
         painter: _AmbientArtworkPainter(
           colors: widget.colors,
+          weights: widget.weights,
           motion: _controller,
         ),
         child: const SizedBox.expand(),
@@ -333,15 +339,25 @@ class _AmbientArtworkBackgroundState extends State<_AmbientArtworkBackground>
 }
 
 class _AmbientArtworkPainter extends CustomPainter {
-  _AmbientArtworkPainter({required this.colors, required this.motion})
-    : super(repaint: motion);
+  _AmbientArtworkPainter({
+    required this.colors,
+    required this.weights,
+    required this.motion,
+  }) : super(repaint: motion);
 
   final List<Color> colors;
+  final List<double> weights;
   final Animation<double> motion;
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = colors.last);
+    var dominantIndex = 0;
+    for (var index = 1; index < weights.length; index++) {
+      if (weights[index] > weights[dominantIndex]) {
+        dominantIndex = index;
+      }
+    }
+    canvas.drawRect(Offset.zero & size, Paint()..color = colors[dominantIndex]);
     final phase = motion.value * math.pi * 2;
     final shortest = math.min(size.width, size.height);
     final blobs = [
@@ -370,21 +386,22 @@ class _AmbientArtworkPainter extends CustomPainter {
     for (var index = 0; index < blobs.length; index++) {
       final blob = blobs[index];
       final color = colors[index % colors.length];
+      final weight = weights[index % weights.length].clamp(.01, 1);
+      final scale = math.sqrt(weight / .25).clamp(.28, 1.45);
+      final radius = blob.radius * scale;
+      final centerOpacity = (.38 + weight * 1.35).clamp(.4, .94);
       canvas.drawCircle(
         blob.center,
-        blob.radius,
+        radius,
         Paint()
-          ..shader =
-              RadialGradient(
-                colors: [
-                  color.withValues(alpha: .92),
-                  color.withValues(alpha: .42),
-                  color.withValues(alpha: 0),
-                ],
-                stops: const [0, .48, 1],
-              ).createShader(
-                Rect.fromCircle(center: blob.center, radius: blob.radius),
-              ),
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: centerOpacity),
+              color.withValues(alpha: centerOpacity * .46),
+              color.withValues(alpha: 0),
+            ],
+            stops: const [0, .48, 1],
+          ).createShader(Rect.fromCircle(center: blob.center, radius: radius)),
       );
     }
     canvas.drawRect(
@@ -395,7 +412,7 @@ class _AmbientArtworkPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_AmbientArtworkPainter oldDelegate) =>
-      oldDelegate.colors != colors;
+      oldDelegate.colors != colors || oldDelegate.weights != weights;
 }
 
 class _Navigation extends StatelessWidget {
