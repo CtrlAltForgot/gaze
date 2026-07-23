@@ -20,6 +20,8 @@ import 'playback/playback_queue_controller.dart';
 import 'storage/playback_state_store.dart';
 import 'storage/artwork_cache.dart';
 import 'storage/file_artwork_cache.dart';
+import 'storage/library_metadata_cache.dart';
+import 'storage/sqlite_library_metadata_cache.dart';
 import 'storage/sqlite_playback_state_store.dart';
 
 Future<void> main() async {
@@ -27,6 +29,7 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
   PlaybackStateStore playbackStateStore;
   ArtworkCache artworkCache;
+  LibraryMetadataCache metadataCache;
   try {
     playbackStateStore = await SqlitePlaybackStateStore.open();
   } catch (_) {
@@ -37,9 +40,16 @@ Future<void> main() async {
   } catch (_) {
     artworkCache = const DisabledArtworkCache();
   }
+  try {
+    metadataCache = await SqliteLibraryMetadataCache.open();
+  } catch (_) {
+    metadataCache = const DisabledLibraryMetadataCache();
+  }
   final credentialStore = const FlutterSecureJellyfinCredentialStore();
   final connectionController = JellyfinConnectionController(
     credentialStore: credentialStore,
+    artworkCache: artworkCache,
+    metadataCache: metadataCache,
     apiFactory: (deviceId) => HttpJellyfinApi(
       client: http.Client(),
       identity: JellyfinClientIdentity(deviceId: deviceId),

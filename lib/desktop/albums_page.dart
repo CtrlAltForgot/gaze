@@ -36,6 +36,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
   bool _loading = false;
   bool _loadingMore = false;
   int _totalCount = 0;
+  bool _showingStaleData = false;
+  DateTime? _cachedAt;
   String? _error;
   AlbumSummary? _selectedAlbum;
 
@@ -95,6 +97,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
         setState(() {
           _albums.addAll(page.albums);
           _totalCount = page.totalCount;
+          _showingStaleData = page.isStale;
+          _cachedAt = page.cachedAt;
         });
         _scheduleLoadAhead();
       }
@@ -125,6 +129,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
         setState(() {
           _albums.addAll(page.albums);
           _totalCount = page.totalCount;
+          _showingStaleData = _showingStaleData || page.isStale;
+          _cachedAt ??= page.cachedAt;
         });
         _scheduleLoadAhead();
       }
@@ -205,6 +211,45 @@ class _AlbumsPageState extends State<AlbumsPage> {
             ],
           ),
         ),
+        if (_showingStaleData)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              GazeSpacing.xLarge,
+              0,
+              GazeSpacing.xLarge,
+              GazeSpacing.medium,
+            ),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .07),
+                border: Border.all(color: Colors.white.withValues(alpha: .14)),
+                borderRadius: BorderRadius.circular(GazeRadii.control),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: GazeSpacing.medium,
+                  vertical: GazeSpacing.small,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 18),
+                    const SizedBox(width: GazeSpacing.small),
+                    Expanded(
+                      child: Text(
+                        _cachedAt == null
+                            ? 'Showing saved library data while Jellyfin is unavailable.'
+                            : 'Showing saved library data from ${_cachedTime(_cachedAt!)} while Jellyfin is unavailable.',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _loadFirstPage,
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         Expanded(child: _buildBody()),
       ],
     );
@@ -295,6 +340,18 @@ class _AlbumsPageState extends State<AlbumsPage> {
       },
     );
   }
+}
+
+String _cachedTime(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour == 0
+      ? 12
+      : local.hour > 12
+      ? local.hour - 12
+      : local.hour;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final period = local.hour >= 12 ? 'PM' : 'AM';
+  return '${local.month}/${local.day} at $hour:$minute $period';
 }
 
 class _AlbumTile extends StatelessWidget {

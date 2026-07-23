@@ -135,7 +135,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** resume reliably and stay responsive with a larger library.
 
-**Current status:** queue and playback restoration use versioned SQLite. A separate versioned artwork directory caches authenticated Jellyfin images under server, item, image-tag, and size keys, bounded to 256 MiB and 2,000 entries with least-recently-used eviction. A versioned SQLite metadata foundation now stores atomic album-page snapshots scoped by server, user, sort, offset, and limit, with timestamps supporting a 15-minute fresh/stale policy; it deliberately excludes artwork bytes and secrets. Connecting those snapshots to Albums with explicit stale/offline feedback is the next slice. Derived-palette and future lyrics caching remain later work.
+**Current status:** queue and playback restoration use versioned SQLite. A separate versioned artwork directory caches authenticated Jellyfin images under server, item, image-tag, and size keys, bounded to 256 MiB and 2,000 entries with least-recently-used eviction. Albums now reads atomic metadata snapshots scoped by server, user, sort, offset, and limit. Snapshots younger than 15 minutes load immediately with matching disk-cached artwork; expired snapshots refresh from Jellyfin and become an explicitly labeled, timestamped fallback if that request fails. Cold-start browsing without a validated Jellyfin session, derived-palette persistence, and future lyrics caching remain later work.
 
 - Choose and migrate a local SQLite schema for queue, playback position, preferences, and indexed metadata.
 - Persist queue edits atomically and restore conservatively after an unclean exit.

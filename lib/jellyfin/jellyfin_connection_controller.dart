@@ -2,6 +2,8 @@ import 'dart:async';
 
 import '../library/album_summary.dart';
 import '../library/track_summary.dart';
+import '../storage/artwork_cache.dart';
+import '../storage/library_metadata_cache.dart';
 import 'jellyfin_api.dart';
 import 'jellyfin_credential_store.dart';
 
@@ -31,11 +33,15 @@ class JellyfinConnectionController {
   JellyfinConnectionController({
     required JellyfinApiFactory apiFactory,
     required JellyfinCredentialStore credentialStore,
+    this.artworkCache = const DisabledArtworkCache(),
+    this.metadataCache = const DisabledLibraryMetadataCache(),
   }) : _apiFactory = apiFactory,
        _credentialStore = credentialStore;
 
   final JellyfinApiFactory _apiFactory;
   final JellyfinCredentialStore _credentialStore;
+  final ArtworkCache artworkCache;
+  final LibraryMetadataCache metadataCache;
   final StreamController<JellyfinConnectionState> _states =
       StreamController<JellyfinConnectionState>.broadcast();
   JellyfinConnectionState _state = const JellyfinConnectionState();
@@ -203,14 +209,86 @@ class JellyfinConnectionController {
     required AlbumSort sort,
     required int startIndex,
     int limit = 24,
-  }) {
+  }) async {
     final (:api, :address, :session) = _requireConnection();
-    return api.getAlbums(
-      address: address,
-      session: session,
+    final serverId = _state.serverInfo!.id;
+    final key = AlbumPageCacheKey(
+      serverId: serverId,
+      userId: session.userId,
       sort: sort,
       startIndex: startIndex,
       limit: limit,
+    );
+    CachedAlbumPage? cached;
+    try {
+      cached = await metadataCache.readAlbumPage(key);
+    } catch (_) {
+      // Cache availability must not block the live Jellyfin library.
+    }
+    if (cached != null && cached.isFreshAt(DateTime.now())) {
+      return _hydrateCachedArtwork(cached, address, stale: false);
+    }
+    try {
+      final page = await api.getAlbums(
+        address: address,
+        session: session,
+        sort: sort,
+        startIndex: startIndex,
+        limit: limit,
+      );
+      try {
+        await metadataCache.writeAlbumPage(key, page);
+      } catch (_) {
+        // A live response remains usable if metadata persistence fails.
+      }
+      return page;
+    } on JellyfinConnectionException {
+      if (cached == null) {
+        rethrow;
+      }
+      return _hydrateCachedArtwork(cached, address, stale: true);
+    }
+  }
+
+  Future<AlbumPage> _hydrateCachedArtwork(
+    CachedAlbumPage cached,
+    JellyfinServerAddress address, {
+    required bool stale,
+  }) async {
+    final albums = <AlbumSummary>[];
+    for (final album in cached.page.albums) {
+      final imageTag = album.imageTag;
+      var artworkBytes = album.artworkBytes;
+      if (imageTag != null) {
+        try {
+          artworkBytes = await artworkCache.read(
+            ArtworkCacheKey(
+              server: address.toString(),
+              itemId: album.id,
+              imageTag: imageTag,
+              maxWidth: 600,
+            ),
+          );
+        } catch (_) {
+          // Missing artwork does not invalidate usable cached metadata.
+        }
+      }
+      albums.add(
+        AlbumSummary(
+          id: album.id,
+          title: album.title,
+          artist: album.artist,
+          year: album.year,
+          imageTag: imageTag,
+          artworkBytes: artworkBytes,
+        ),
+      );
+    }
+    return AlbumPage(
+      albums: albums,
+      totalCount: cached.page.totalCount,
+      isStale: stale,
+      cachedAt: cached.storedAt,
     );
   }
 

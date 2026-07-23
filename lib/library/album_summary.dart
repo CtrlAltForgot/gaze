@@ -21,8 +21,15 @@ class AlbumSummary {
 enum AlbumSort { recentlyAdded, title, artist, releaseYear }
 
 class AlbumPage {
-  const AlbumPage({required this.albums, required this.totalCount});
+  const AlbumPage({
+    required this.albums,
+    required this.totalCount,
+    this.isStale = false,
+    this.cachedAt,
+  });
 
   final List<AlbumSummary> albums;
   final int totalCount;
+  final bool isStale;
+  final DateTime? cachedAt;
 }
