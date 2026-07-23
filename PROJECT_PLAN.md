@@ -59,7 +59,7 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 **Goal:** create the original gaze visual system and application shell without server or playback complexity.
 
-**Current status:** in progress. The first responsive desktop shell, provisional design tokens, sample artwork grid, navigation structure, and nonfunctional player placeholder passed automated checks and received initial manual visual approval on Linux. This confirms the direction, not the finished design. Broader width review, keyboard traversal, focus behavior, touch sizing, reduced motion, and component refinement remain.
+**Current status:** in progress. The responsive desktop shell and real library views now use a manually approved artwork-derived atmosphere: the current album supplies a contrast-fitted accent and a continuous ambient palette beneath translucent navigation and player surfaces, with a reduced-motion fallback. This confirms the direction, not the finished design. Broader width review, keyboard traversal, focus behavior, touch sizing, and component refinement remain.
 
 - Document and implement the first color, typography, spacing, shape, elevation, motion, and focus tokens without treating them as final branding.
 - Replace the disposable playback test as the default route with a basic desktop shell while keeping the diagnostic screen isolated and reachable during development.

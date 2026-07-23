@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
 import '../design/gaze_theme.dart';
+import '../design/artwork_palette.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
 import '../library/track_summary.dart';
@@ -37,7 +39,10 @@ class _DesktopShellState extends State<DesktopShell> {
   bool _loading = false;
   String? _error;
   StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
+  StreamSubscription<PlaybackSnapshot>? _playbackSubscription;
   _LibraryDestination _destination = _LibraryDestination.home;
+  ArtworkPalette _palette = ArtworkPalette.fallback;
+  Uint8List? _paletteArtwork;
 
   bool get _connected => widget.connectionController.state.isConnected;
 
@@ -47,6 +52,10 @@ class _DesktopShellState extends State<DesktopShell> {
     _connectionSubscription = widget.connectionController.states.listen(
       _handleConnectionState,
     );
+    _playbackSubscription = widget.playbackController.states.listen(
+      _handlePlaybackState,
+    );
+    _handlePlaybackState(widget.playbackController.state);
     if (_connected) {
       _loadAlbums();
     }
@@ -70,7 +79,20 @@ class _DesktopShellState extends State<DesktopShell> {
   @override
   void dispose() {
     unawaited(_connectionSubscription?.cancel());
+    unawaited(_playbackSubscription?.cancel());
     super.dispose();
+  }
+
+  Future<void> _handlePlaybackState(PlaybackSnapshot playback) async {
+    final artwork = playback.artworkBytes;
+    if (artwork == null || identical(artwork, _paletteArtwork)) {
+      return;
+    }
+    _paletteArtwork = artwork;
+    final palette = await extractArtworkPalette(artwork);
+    if (mounted && identical(artwork, _paletteArtwork)) {
+      setState(() => _palette = palette);
+    }
   }
 
   Future<void> _loadAlbums() async {
@@ -120,52 +142,98 @@ class _DesktopShellState extends State<DesktopShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final compactNavigation = constraints.maxWidth < 920;
-          return Column(
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Navigation(
-                      compact: compactNavigation,
-                      destination: _destination,
-                      onDestinationChanged: (destination) =>
-                          setState(() => _destination = destination),
-                      onOpenJellyfinConnection: widget.onOpenJellyfinConnection,
-                      onOpenPlaybackTest: widget.onOpenPlaybackTest,
-                    ),
-                    const VerticalDivider(width: 1, thickness: 1),
-                    Expanded(
-                      child: switch (_destination) {
-                        _LibraryDestination.home => _HomeContent(
-                          connected: _connected,
-                          loading: _loading,
-                          albums: _albums,
-                          error: _error,
-                          onConnect: widget.onOpenJellyfinConnection,
-                          onRetry: _loadAlbums,
-                        ),
-                        _LibraryDestination.albums => AlbumsPage(
-                          connectionController: widget.connectionController,
-                          onConnect: widget.onOpenJellyfinConnection,
-                          onPlayTrack: _playAlbum,
-                        ),
-                      },
-                    ),
-                  ],
+    final theme = Theme.of(context);
+    return Theme(
+      data: theme.copyWith(
+        colorScheme: theme.colorScheme.copyWith(primary: _palette.accent),
+        sliderTheme: theme.sliderTheme.copyWith(
+          activeTrackColor: _palette.accent,
+          thumbColor: _palette.accent,
+        ),
+        focusColor: _palette.accent.withValues(alpha: .24),
+      ),
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: AnimatedContainer(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 700),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _palette.background[0],
+                      Color.lerp(
+                        _palette.background[0],
+                        _palette.background[1],
+                        .45,
+                      )!,
+                      _palette.background[1],
+                      _palette.background[2],
+                    ],
+                    stops: const [0, .34, .7, 1],
+                  ),
                 ),
               ),
-              _PlayerBar(
-                controller: widget.playbackController,
-                queueController: widget.queueController,
-              ),
-            ],
-          );
-        },
+            ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compactNavigation = constraints.maxWidth < 920;
+                return Column(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _Navigation(
+                            compact: compactNavigation,
+                            destination: _destination,
+                            onDestinationChanged: (destination) =>
+                                setState(() => _destination = destination),
+                            onOpenJellyfinConnection:
+                                widget.onOpenJellyfinConnection,
+                            onOpenPlaybackTest: widget.onOpenPlaybackTest,
+                          ),
+                          VerticalDivider(
+                            width: 1,
+                            thickness: 1,
+                            color: Colors.white.withValues(alpha: .16),
+                          ),
+                          Expanded(
+                            child: switch (_destination) {
+                              _LibraryDestination.home => _HomeContent(
+                                connected: _connected,
+                                loading: _loading,
+                                albums: _albums,
+                                error: _error,
+                                onConnect: widget.onOpenJellyfinConnection,
+                                onRetry: _loadAlbums,
+                              ),
+                              _LibraryDestination.albums => AlbumsPage(
+                                connectionController:
+                                    widget.connectionController,
+                                onConnect: widget.onOpenJellyfinConnection,
+                                onPlayTrack: _playAlbum,
+                              ),
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    _PlayerBar(
+                      controller: widget.playbackController,
+                      queueController: widget.queueController,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -189,7 +257,7 @@ class _Navigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: GazeColors.navigation,
+      color: GazeColors.navigation.withValues(alpha: .46),
       child: SizedBox(
         width: compact ? 80 : 224,
         child: Padding(
@@ -309,7 +377,9 @@ class _NavigationItem extends StatelessWidget {
         enabled: onTap != null,
         label: label,
         child: Material(
-          color: selected ? GazeColors.surfaceRaised : Colors.transparent,
+          color: selected
+              ? Colors.white.withValues(alpha: .075)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(GazeRadii.control),
           child: InkWell(
             onTap: onTap,
@@ -394,13 +464,13 @@ class _HomeContent extends StatelessWidget {
                 const SizedBox(width: GazeSpacing.large),
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 280),
-                  child: const TextField(
+                  child: TextField(
                     decoration: InputDecoration(
                       hintText: 'Search your library',
-                      prefixIcon: Icon(Icons.search_rounded),
+                      prefixIcon: const Icon(Icons.search_rounded),
                       filled: true,
-                      fillColor: GazeColors.surface,
-                      border: OutlineInputBorder(
+                      fillColor: GazeColors.surface.withValues(alpha: .38),
+                      border: const OutlineInputBorder(
                         borderRadius: BorderRadius.all(
                           Radius.circular(GazeRadii.control),
                         ),
@@ -596,9 +666,11 @@ class _PlayerBar extends StatelessWidget {
         return Container(
           height: 104,
           padding: const EdgeInsets.symmetric(horizontal: GazeSpacing.large),
-          decoration: const BoxDecoration(
-            color: GazeColors.navigation,
-            border: Border(top: BorderSide(color: GazeColors.outline)),
+          decoration: BoxDecoration(
+            color: GazeColors.navigation.withValues(alpha: .52),
+            border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: .16)),
+            ),
           ),
           child: Row(
             children: [
@@ -724,8 +796,8 @@ class _PlayerArtwork extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 58,
-      height: 58,
+      width: 76,
+      height: 76,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: GazeColors.surfaceRaised,
