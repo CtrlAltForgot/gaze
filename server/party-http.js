@@ -28,7 +28,7 @@ export async function partyRoute(req, res, url, {parties, jellyfin, readBody, se
     const owner = await jellyfin.authenticate(token);
     send(res, 201, await parties.create(owner, await readBody(req))); return true;
   }
-  const route = url.pathname.match(/^\/v1\/parties\/([a-f0-9]{32})(?:\/(join|state|leave|audio|artwork|command|search)(?:\/([a-f0-9]{32}))?)?$/);
+  const route = url.pathname.match(/^\/v1\/parties\/([a-f0-9]{32})(?:\/(join|state|leave|audio|artwork|lyrics|command|search)(?:\/([a-f0-9]{32}))?)?$/);
   if (!route) { send(res, 404, {error: 'Session action not found.'}); return true; }
   const [, id, action, item] = route;
   if (req.method === 'POST' && action === 'join' && !item) {
@@ -51,6 +51,9 @@ export async function partyRoute(req, res, url, {parties, jellyfin, readBody, se
   }
   if (req.method === 'GET' && ['audio', 'artwork'].includes(action) && item) {
     await parties.media(req, res, id, token, item, action === 'artwork'); return true;
+  }
+  if (req.method === 'GET' && action === 'lyrics' && item) {
+    send(res, 200, {lyrics: await parties.lyrics(id, token, item)}); return true;
   }
   send(res, 404, {error: 'Session action not found.'}); return true;
 }

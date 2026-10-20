@@ -7,6 +7,7 @@ import '../design/gaze_motion.dart';
 import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/track_lyrics.dart';
+import '../party/party_controller.dart';
 import '../playback/playback_controller.dart';
 import 'marquee_text.dart';
 
@@ -17,6 +18,7 @@ class LyricsView extends StatefulWidget {
     required this.playbackController,
     required this.onClose,
     this.immersive = false,
+    this.partyController,
     super.key,
   });
 
@@ -24,6 +26,7 @@ class LyricsView extends StatefulWidget {
   final PlaybackController playbackController;
   final VoidCallback onClose;
   final bool immersive;
+  final PartyController? partyController;
 
   @override
   State<LyricsView> createState() => _LyricsViewState();
@@ -41,12 +44,36 @@ class _LyricsViewState extends State<LyricsView> {
   double? _layoutWidth;
   bool _wasActive = false;
   bool _reloadWhenActive = true;
+  Object? _loadedIdentity;
+  Object? get _identity => widget.partyController?.following == true
+      ? widget.partyController!.lyricsIdentity
+      : _playback.itemId;
 
   @override
   void initState() {
     super.initState();
     _playback = widget.playbackController.state;
     _subscription = widget.playbackController.states.listen(_handlePlayback);
+    widget.partyController?.addListener(_partyChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant LyricsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.partyController != widget.partyController) {
+      oldWidget.partyController?.removeListener(_partyChanged);
+      widget.partyController?.addListener(_partyChanged);
+      _partyChanged();
+    }
+  }
+
+  void _partyChanged() {
+    if (!mounted || _identity == _loadedIdentity) return;
+    if (!_wasActive) {
+      _reloadWhenActive = true;
+    } else {
+      setState(_load);
+    }
   }
 
   @override
@@ -68,6 +95,7 @@ class _LyricsViewState extends State<LyricsView> {
   @override
   void dispose() {
     _request++;
+    widget.partyController?.removeListener(_partyChanged);
     unawaited(_subscription?.cancel());
     _resumeFollowing?.cancel();
     _scroll.dispose();
@@ -77,22 +105,25 @@ class _LyricsViewState extends State<LyricsView> {
   void _load() {
     final request = ++_request;
     final playback = _playback;
+    _loadedIdentity = _identity;
     _lyrics = null;
     _lineKeys.clear();
     _activeLine = -1;
     _browsing = false;
     _failed = false;
     _resumeFollowing?.cancel();
-    _loading = playback.itemId != null;
+    _loading = _loadedIdentity != null;
     if (!_loading) return;
     unawaited(() async {
       try {
-        final lyrics = await widget.connectionController.loadLyrics(
-          playback.itemId!,
-          title: playback.title,
-          artist: playback.artist,
-          duration: playback.duration,
-        );
+        final lyrics = widget.partyController?.following == true
+            ? await widget.partyController!.loadLyrics()
+            : await widget.connectionController.loadLyrics(
+                playback.itemId!,
+                title: playback.title,
+                artist: playback.artist,
+                duration: playback.duration,
+              );
         if (!mounted || request != _request) return;
         setState(() {
           _lyrics = lyrics;
@@ -118,6 +149,7 @@ class _LyricsViewState extends State<LyricsView> {
     // Engines can report the recording duration after the source starts. Retry
     // with that duration so a lookup without it cannot pin the wrong version.
     final reload =
+        _identity != _loadedIdentity ||
         playback.itemId != _playback.itemId ||
         playback.title != _playback.title ||
         playback.artist != _playback.artist ||
@@ -251,7 +283,7 @@ class _LyricsViewState extends State<LyricsView> {
   }
 
   Widget _body() {
-    if (_playback.itemId == null)
+    if (_identity == null)
       return const _LyricsMessage(
         'Choose a song',
         'Lyrics will appear here while a song is playing.',

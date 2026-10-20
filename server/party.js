@@ -207,4 +207,52 @@ export class Parties {
       await pipeline(Readable.fromWeb(upstream.body), res);
     } finally { res.off('close', cancel); s.streams.delete(stream); }
   }
+
+  async lyrics(id, token, itemId) {
+    const checkAccess = () => {
+      const s = this.authorize(id, token);
+      if (!s.queue.some(track => track.id === itemId)) fail('This song is not in the shared queue.', 403);
+      return s;
+    };
+    const s = checkAccess();
+    this.rateLimit('lyrics:' + hash(token).toString('hex'), 60);
+    const url = new URL(this.jellyfin.origin);
+    url.pathname = url.pathname.replace(/\/$/, '') + `/Audio/${itemId}/Lyrics`;
+    url.search = '';
+    let data;
+    try {
+      const response = await this.fetch(url, {
+        headers: {'X-Emby-Token': s.owner.token}, redirect: 'error',
+        signal: AbortSignal.timeout(10000),
+      });
+      if (response.status === 404) {
+        await response.body?.cancel();
+        data = null;
+      } else {
+        if (!response.ok) { await response.body?.cancel(); throw Error('upstream'); }
+        const chunks = []; let size = 0;
+        for await (const chunk of response.body) {
+          size += chunk.length;
+          if (size > 512 * 1024) throw Error('size');
+          chunks.push(chunk);
+        }
+        data = JSON.parse(Buffer.concat(chunks).toString());
+        if (!Array.isArray(data?.Lyrics) || data.Lyrics.length > 5000) throw Error('lyrics');
+      }
+    } catch {
+      checkAccess();
+      fail('Lyrics are temporarily unavailable. Try again.', 502);
+    }
+    // Membership or the queue may have changed while Jellyfin was responding.
+    checkAccess();
+    if (data === null) return null;
+    return {
+      isSynchronized: data.Metadata?.IsSynced === true,
+      lines: data.Lyrics.filter(line => typeof line?.Text === 'string').map(line => ({
+        text: line.Text,
+        ...(Number.isSafeInteger(line.Start) && line.Start >= 0
+          ? {startMicroseconds: Math.floor(line.Start / 10)} : {}),
+      })),
+    };
+  }
 }

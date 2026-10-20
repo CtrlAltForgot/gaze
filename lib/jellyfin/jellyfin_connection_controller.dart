@@ -1055,14 +1055,23 @@ class JellyfinConnectionController {
     String? title,
     String? artist,
     Duration duration = Duration.zero,
+    Future<TrackLyrics?> Function()? libraryLoader,
   }) async {
     TrackLyrics? libraryLyrics;
-    if (_state.isConnected) {
+    if (libraryLoader != null || _state.isConnected) {
       try {
-        final (:api, :address, :session) = _requireConnection();
-        libraryLyrics = await api
-            .getLyrics(address: address, session: session, trackId: trackId)
-            .timeout(const Duration(seconds: 3));
+        if (libraryLoader != null) {
+          // A guest reads the host's shared library through its session, never
+          // through an unrelated account saved on the guest's own device.
+          libraryLyrics = await libraryLoader().timeout(
+            const Duration(seconds: 3),
+          );
+        } else {
+          final (:api, :address, :session) = _requireConnection();
+          libraryLyrics = await api
+              .getLyrics(address: address, session: session, trackId: trackId)
+              .timeout(const Duration(seconds: 3));
+        }
         if (libraryLyrics?.hasTiming == true) return libraryLyrics;
       } catch (_) {
         if (lyricsProvider == null) rethrow;

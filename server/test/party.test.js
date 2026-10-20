@@ -107,3 +107,57 @@ test('session search returns audio metadata and validates added songs against th
  await assert.rejects(parties.command(host.id,guest.token,{action:'add',itemId:'c'.repeat(32)}),/unavailable/);
  parties.leave(host.id,guest.token);await assert.rejects(parties.search(host.id,guest.token,'test'),/invalid/);
 });
+
+const lyricData = {Metadata:{IsSynced:true, Path:'/private/library/song.lrc'}, Lyrics:[{Text:'First line',Start:0},{Text:'Second line',Start:120000000},{Text:'Untimed header'},{Text:7}], PrivateToken:owner.token};
+const lyricsResponse = () => Response.json(lyricData);
+
+test('HTTP guest lyrics return only text and timing, with scoped session access', async t=>{
+  const upstream=[];
+  const {parties,jellyfin}=setup({fetchImpl:async(url,options)=>{upstream.push({url,options});return lyricsResponse();}});
+  const host=await parties.create(owner,input), code=new URL(host.inviteUrl).pathname.split('/').pop();
+  const guest=parties.joinInvite(code,'Guest');
+  const server=createServer({parties,jellyfin});server.listen(0,'127.0.0.1');await once(server,'listening');
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const base=`http://127.0.0.1:${server.address().port}/v1/parties/${host.id}/lyrics/`;
+  const get=(id,token=guest.token)=>fetch(base+id,{headers:token?{Authorization:`Bearer ${token}`}:{}});
+  const response=await get(a);assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.deepEqual(await response.json(),{lyrics:{isSynchronized:true,lines:[{text:'First line',startMicroseconds:0},{text:'Second line',startMicroseconds:12000000},{text:'Untimed header'}]}});
+  assert.equal(upstream[0].url.pathname,`/Audio/${a}/Lyrics`);
+  assert.equal(upstream[0].options.headers['X-Emby-Token'],owner.token);
+  assert.equal(upstream[0].options.redirect,'error');
+  assert.equal((await get(a,null)).status,401);
+  assert.equal((await get(a,code)).status,403);
+  assert.equal((await get('c'.repeat(32))).status,403);
+  assert.equal(upstream.length,1);
+  parties.leave(host.id,guest.token);
+  assert.equal((await get(a)).status,403);
+  parties.leave(host.id,host.token);
+  assert.equal((await get(a)).status,410);
+});
+
+test('missing and plain host lyrics are distinguished from upstream failure',async()=>{
+  let response=()=>new Response(null,{status:404});
+  const {parties}=setup({fetchImpl:async()=>response()});
+  const host=await parties.create(owner,input), guest=parties.joinInvite(new URL(host.inviteUrl).pathname.split('/').pop(),'Guest');
+  assert.equal(await parties.lyrics(host.id,guest.token,a),null);
+  response=()=>Response.json({Metadata:{IsSynced:false},Lyrics:[{Text:'Plain line',Start:null}]});
+  assert.deepEqual(await parties.lyrics(host.id,guest.token,a),{isSynchronized:false,lines:[{text:'Plain line'}]});
+  for(const invalid of [()=>new Response('private failure',{status:500}),()=>new Response('invalid json'),()=>Response.json({Lyrics:'wrong shape'}),()=>new Response('x'.repeat(512*1024+1))]) {
+    response=invalid;
+    await assert.rejects(parties.lyrics(host.id,guest.token,a),e=>e.status===502 && !e.message.includes('private'));
+  }
+});
+
+for(const change of ['leave','end','remove','expire'])test(`in-flight lyrics reject access after ${change}`,async()=>{
+  let resolve;
+  const pending=new Promise(r=>resolve=r);
+  const {parties,advance}=setup({fetchImpl:()=>pending});
+  const host=await parties.create(owner,input), guest=parties.joinInvite(new URL(host.inviteUrl).pathname.split('/').pop(),'Guest');
+  const result=parties.lyrics(host.id,guest.token,b);
+  if(change==='leave')parties.leave(host.id,guest.token);
+  if(change==='end')parties.leave(host.id,host.token);
+  if(change==='remove')await parties.update(host.id,host.token,{...input,queue:[a]});
+  if(change==='expire')advance(121000);
+  resolve(lyricsResponse());
+  await assert.rejects(result,e=>[403,410].includes(e.status));
+});

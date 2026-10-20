@@ -485,6 +485,7 @@ class _DesktopShellState extends State<DesktopShell> {
     immersive: immersive,
     connectionController: widget.connectionController,
     playbackController: widget.playbackController,
+    partyController: widget.partyController,
     onClose: () => setState(() => _lyricsVisible = false),
   );
 
@@ -1914,7 +1915,9 @@ class _PlayerBar extends StatelessWidget {
                         child: Row(
                           children: [
                             IconButton(
-                              onPressed: playback.itemId == null
+                              onPressed:
+                                  playback.itemId == null &&
+                                      !queueController.followingParty
                                   ? null
                                   : onToggleLyrics,
                               tooltip: lyricsVisible

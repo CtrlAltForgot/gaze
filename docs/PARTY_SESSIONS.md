@@ -32,11 +32,30 @@ without removing the wrong occurrence. The host applies new server commands
 through the shared playback controller and acknowledges their version.
 
 The service validates every new queue item against the host's library and proxies
-only session-listed audio/artwork. Streaming supports ranges and propagates
+only session-listed audio/artwork/lyrics. Streaming supports ranges and propagates
 cancellation, without buffering songs in memory. Invite links are bearer access:
 share them only with intended listeners. Limit each session to 12 participants,
 1,000 queued items, and 12 hours. The host must remain connected; guest edits do not extend its heartbeat. Guests pause
 on stale heartbeats. Guest audio requires explicit GAZE_PARTY_GUESTS=true.
+
+## Guest lyrics
+
+Guests can open Lyrics from the player or Media Mode without a Jellyfin account.
+`GET /v1/parties/<id>/lyrics/<itemId>` accepts a current participant token and
+returns only lyric text, timing, and the synchronization flag for a queued song.
+The service uses the host credential internally, bounds the response to 512 KiB,
+and rechecks membership and queue access after the upstream request. Responses
+are not cached by the proxy. Ended sessions, departed members, and removed songs
+lose access. Guest playback sources retain no personal-library item ID, so this
+does not enable favorites or report guest playback to a saved Jellyfin account.
+
+The existing lyric resolution order also applies to guests: timed host-library
+lyrics, then matching LRCLIB timed lyrics, then plain lyrics. A guest's saved
+library is never queried for a host track ID. Older services without the new
+endpoint still allow metadata-based lookup. Timed-line clicks use the shared
+party seek command. Acceptance covers signed-out guests, a different saved
+account, song changes, missing lyrics, failures, leaving, and expired sessions.
+
 
 ## Deployment
 

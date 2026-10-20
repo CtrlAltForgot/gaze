@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../connect/connect_controller.dart';
+import '../library/track_lyrics.dart';
 import '../playback/playback_controller.dart';
 import '../playback/playback_queue_controller.dart';
 import 'party_api.dart';
@@ -49,6 +50,70 @@ class PartyController extends ChangeNotifier {
   List<String> get listeners =>
       (snapshot?['listeners'] as List? ?? []).whereType<String>().toList();
   bool get connected => snapshot?['connected'] == true && error == null;
+  Map<String, dynamic>? get _guestTrack {
+    if (!following) return null;
+    final tracks = snapshot?['queue'] as List?;
+    final index = snapshot?['index'] as int?;
+    if (tracks == null || index == null || index < 0 || index >= tracks.length)
+      return null;
+    return tracks[index] as Map<String, dynamic>;
+  }
+
+  // Guest sources deliberately have no personal-library itemId. Lyrics use
+  // this session identity without enabling account actions or playback reports.
+  Object? get lyricsIdentity => following ? (_id, _guestTrack?['id']) : null;
+
+  Future<TrackLyrics?> loadLyrics() async {
+    final track = _guestTrack;
+    if (track == null) return null;
+    final generation = _generation,
+        server = _server!,
+        token = _token!,
+        id = _id!;
+    final trackId = track['id'] as String;
+    final lyrics = await connect.connection.loadLyrics(
+      trackId,
+      title: track['title'] as String?,
+      artist: track['artist'] as String?,
+      duration: Duration(
+        milliseconds: (track['durationMs'] as num?)?.toInt() ?? 0,
+      ),
+      libraryLoader: () async {
+        final Map<String, dynamic> response;
+        try {
+          response = await api.request(
+            server,
+            token,
+            '/v1/parties/$id/lyrics/$trackId',
+          );
+        } on PartyException catch (e) {
+          // Older services do not have this endpoint; metadata lookup still works.
+          if (e.status == 404) return null;
+          rethrow;
+        }
+        final data = response['lyrics'];
+        if (data == null) return null;
+        final lines = (data['lines'] as List).cast<Map<String, dynamic>>();
+        return TrackLyrics(
+          isSynchronized: data['isSynchronized'] == true,
+          lines: List.unmodifiable(
+            lines.map(
+              (line) => LyricLine(
+                text: line['text'] as String,
+                start: line['startMicroseconds'] is int
+                    ? Duration(microseconds: line['startMicroseconds'] as int)
+                    : null,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (_disposed || generation != _generation || _guestTrack?['id'] != trackId)
+      return null;
+    return lyrics;
+  }
+
   bool get canHost =>
       connect.address != null &&
       connect.connection.state.isConnected &&

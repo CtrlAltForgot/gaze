@@ -34,6 +34,7 @@ class Connection extends JellyfinConnectionController {
     String? title,
     String? artist,
     Duration duration = Duration.zero,
+    Future<TrackLyrics?> Function()? libraryLoader,
   }) async {
     requests.add(duration);
     return pending?.future ?? result;
