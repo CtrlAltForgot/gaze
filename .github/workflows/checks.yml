@@ -59,6 +59,15 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist | Out-Null
+          # Ship the application-local CRT so fresh Windows installs can run it.
+          $vswhere = "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe"
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $crt = Get-ChildItem "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" -Directory | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $crt) { throw 'Visual C++ redistributable directory was not found.' }
+          Copy-Item "$($crt.FullName)/*.dll" build/windows/x64/runner/Release/
+          foreach ($name in @('msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll')) {
+            if (-not (Test-Path "build/windows/x64/runner/Release/$name")) { throw "Missing runtime: $name" }
+          }
           Copy-Item packaging/windows/register-invites.ps1 build/windows/x64/runner/Release/
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/gaze-windows-x64.zip
       - name: Package macOS
