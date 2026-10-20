@@ -97,6 +97,23 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 
+# Optional local engine, pinned to the same SDK revision. Debug uses the stock
+# debug engine; release uses this only when the verified binary is present.
+set(GAZE_ENGINE "${CMAKE_CURRENT_SOURCE_DIR}/../.local-engine/libflutter_linux_gtk.so")
+if(CMAKE_BUILD_TYPE STREQUAL "Release" AND EXISTS "${GAZE_ENGINE}")
+  get_directory_property(GAZE_FLUTTER_ROOT DIRECTORY "${FLUTTER_MANAGED_DIR}" DEFINITION FLUTTER_ROOT)
+  file(READ "${GAZE_FLUTTER_ROOT}/bin/cache/engine.stamp" GAZE_ENGINE_REVISION)
+  string(STRIP "${GAZE_ENGINE_REVISION}" GAZE_ENGINE_REVISION)
+  if(NOT GAZE_ENGINE_REVISION STREQUAL "69c8c61792f04cc809dfef0c910414fb9afc06cd")
+    message(FATAL_ERROR "Rebuild gaze's optional high-refresh engine for this Flutter SDK.")
+  endif()
+  file(SHA256 "${GAZE_ENGINE}" GAZE_ENGINE_SHA)
+  if(NOT GAZE_ENGINE_SHA STREQUAL "4aef2bdaeb64c2c258df69c312191a4efa6cec8292ee9e31015ec570636eeddc")
+    message(FATAL_ERROR "gaze high-refresh engine hash does not match its verified build.")
+  endif()
+  set(FLUTTER_LIBRARY "${GAZE_ENGINE}")
+endif()
+
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 

@@ -11,6 +11,7 @@ class PlaybackStateCoordinator {
     required PlaybackQueueController queueController,
     required JellyfinConnectionController connectionController,
     required PlaybackStateStore store,
+    this.isFollowingParty,
   }) : _playbackController = playbackController,
        _queueController = queueController,
        _connectionController = connectionController,
@@ -31,6 +32,7 @@ class PlaybackStateCoordinator {
   final PlaybackQueueController _queueController;
   final JellyfinConnectionController _connectionController;
   final PlaybackStateStore _store;
+  final bool Function()? isFollowingParty;
   late final StreamSubscription<PlaybackQueueState> _queueSubscription;
   late final StreamSubscription<PlaybackSnapshot> _playbackSubscription;
   late final StreamSubscription<JellyfinConnectionState>
@@ -67,6 +69,7 @@ class PlaybackStateCoordinator {
   }
 
   Future<void> _restore() async {
+    if (isFollowingParty?.call() == true) return;
     final connection = _connectionController.state;
     final serverId = connection.serverInfo?.id;
     final userId = connection.session?.userId;
@@ -80,6 +83,7 @@ class PlaybackStateCoordinator {
     _restoring = true;
     try {
       final saved = await _store.read();
+      if (isFollowingParty?.call() == true) return;
       _restoredAccountKey = accountKey;
       if (saved == null ||
           saved.serverId != serverId ||
@@ -98,7 +102,11 @@ class PlaybackStateCoordinator {
               title: item.title,
               artist: item.artist,
               itemId: item.itemId,
-              artworkBytes: saved.artworkBytes,
+              artworkBytes: index == saved.currentIndex
+                  ? saved.artworkBytes
+                  : null,
+              artworkId: item.artworkId ?? item.itemId,
+              artworkTag: item.artworkTag,
               startPosition: index == saved.currentIndex
                   ? saved.position
                   : Duration.zero,
@@ -109,6 +117,9 @@ class PlaybackStateCoordinator {
         sources,
         currentIndex: saved.currentIndex,
         volume: saved.volume,
+        shuffleEnabled: saved.shuffleEnabled,
+        repeatMode: saved.repeatMode,
+        originalOrder: saved.originalOrder,
       );
       _lastSavedPosition = saved.position;
     } catch (_) {
@@ -127,6 +138,7 @@ class PlaybackStateCoordinator {
   }
 
   Future<void> _save() async {
+    if (isFollowingParty?.call() == true) return;
     final connection = _connectionController.state;
     final serverId = connection.serverInfo?.id;
     final userId = connection.session?.userId;
@@ -149,6 +161,8 @@ class PlaybackStateCoordinator {
           itemId: itemId,
           title: source.title,
           artist: source.artist,
+          artworkId: source.artworkId,
+          artworkTag: source.artworkTag,
         ),
       );
     }
@@ -165,10 +179,20 @@ class PlaybackStateCoordinator {
         currentIndex: queue.currentIndex,
         position: position,
         volume: playback.volume,
+        shuffleEnabled: queue.shuffleEnabled,
+        repeatMode: queue.repeatMode,
+        originalOrder: queue.originalOrder,
         artworkBytes: queue.items[queue.currentIndex].artworkBytes,
       ),
     );
     _lastSavedPosition = position;
+  }
+
+  /// Persist the last position before an explicit desktop Quit action.
+  Future<void> flush() async {
+    if (_disposed || _restoring) return;
+    _pending = _pending.then((_) => _save()).catchError((_) {});
+    await _pending;
   }
 
   Future<void> dispose() async {

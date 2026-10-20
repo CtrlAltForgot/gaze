@@ -54,3 +54,24 @@ The interface should explain itself through hierarchy, placement, feedback, and 
 ## Originality guardrail
 
 Do not recreate another service's exact navigation, icon arrangement, gradients, page structure, or signature interactions. For each major screen, start with the listener's task and gaze's desktop layout system. References may set the quality bar; gaze's hierarchy, proportions, motion, and details must form a coherent identity of their own.
+
+
+## Compact player controls and tooltips
+
+The persistent player uses simple neutral transport icons and a 32-pixel
+play/pause disc inside a 48-pixel interactive target. Shuffle and repeat use
+small artwork-accent checkmarks when enabled, inspired by the user's DeskStrip
+widget; repeat-one also shows a numeral. State is exposed through semantics,
+and keyboard focus and pointer feedback remain visible. All commands continue
+through the shared playback and queue controllers.
+
+Hover text is reserved for controls whose function needs explanation, such as
+edit, lyrics, queue, and artwork editing. Visible playlist names and labeled
+Connect navigation do not repeat their text in popups. Familiar player transport
+controls retain accessible names without hover popups. Remaining tooltips use a
+brief delay and a dark surface consistent with the application.
+
+Acceptance includes narrow and wide layouts, shuffle and all repeat states,
+keyboard activation, unavailable playback, and hovering labeled navigation
+versus an unlabeled edit action. Automated checks and native Linux visual
+inspection are recorded separately from the user's final visual approval.

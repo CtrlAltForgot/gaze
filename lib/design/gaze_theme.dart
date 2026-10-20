@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'gaze_motion.dart';
 
 abstract final class GazeColors {
   static const canvas = Color(0xFF101114);
@@ -62,6 +63,28 @@ ThemeData buildGazeTheme() {
       ),
     ),
     sliderTheme: const SliderThemeData(activeTrackColor: GazeColors.accent),
+    tooltipTheme: TooltipThemeData(
+      waitDuration: const Duration(milliseconds: 700),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      textStyle: const TextStyle(color: GazeColors.textPrimary, fontSize: 12),
+      decoration: BoxDecoration(
+        color: GazeColors.surfaceRaised,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: GazeColors.outline),
+      ),
+    ),
+    filledButtonTheme: const FilledButtonThemeData(
+      style: ButtonStyle(animationDuration: GazeMotion.feedback),
+    ),
+    outlinedButtonTheme: const OutlinedButtonThemeData(
+      style: ButtonStyle(animationDuration: GazeMotion.feedback),
+    ),
+    textButtonTheme: const TextButtonThemeData(
+      style: ButtonStyle(animationDuration: GazeMotion.feedback),
+    ),
+    iconButtonTheme: const IconButtonThemeData(
+      style: ButtonStyle(animationDuration: GazeMotion.feedback),
+    ),
     focusColor: GazeColors.accent.withValues(alpha: 0.22),
     splashFactory: InkSparkle.splashFactory,
   );

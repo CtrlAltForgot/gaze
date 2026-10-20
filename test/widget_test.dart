@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'package:gaze/library/playlist_summary.dart';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -27,44 +29,11 @@ void main() {
     );
 
     expect(find.text('g'), findsOneWidget);
+    expect(find.byTooltip('Open the playback technical test'), findsNothing);
     expect(find.text('Your music, brought forward.'), findsOneWidget);
     expect(find.text('Recently added'), findsNothing);
     expect(find.text('Nothing playing'), findsOneWidget);
     expect(find.text('Connect your Jellyfin library'), findsOneWidget);
-  });
-
-  testWidgets('keeps the playback technical test reachable', (tester) async {
-    final controller = FakePlaybackController();
-
-    await tester.pumpWidget(
-      GazeApp(
-        playbackController: controller,
-        connectionController: createFakeConnectionController(),
-      ),
-    );
-    await tester.tap(find.byTooltip('Open the playback technical test'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('gaze playback technical test'), findsOneWidget);
-    expect(find.text('Choose local audio file'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Load remote URL'), findsOneWidget);
-    expect(find.text('Play'), findsOneWidget);
-    expect(find.text('Pause'), findsOneWidget);
-    expect(find.text('Stop'), findsOneWidget);
-    expect(find.text('Playback state: idle'), findsOneWidget);
-    expect(find.text('Completion: not reached'), findsOneWidget);
-    expect(find.text('Error output:'), findsOneWidget);
-
-    await tester.enterText(
-      find.byType(TextField),
-      'https://example.com/audio.flac',
-    );
-    await tester.tap(find.text('Load remote URL'));
-    await tester.pump();
-
-    expect(controller.loadedRemoteUrl.toString(), endsWith('audio.flac'));
-    expect(find.textContaining('Source: https://example.com'), findsOneWidget);
   });
 
   testWidgets('connects through the temporary Jellyfin screen', (tester) async {
@@ -77,10 +46,10 @@ void main() {
         connectionController: connectionController,
       ),
     );
-    await tester.tap(find.byTooltip('Connect to Jellyfin'));
+    await tester.tap(find.byTooltip('Connections'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Connect Jellyfin'), findsOneWidget);
+    expect(find.text('Connect'), findsWidgets);
     expect(find.text('Bring your library into gaze'), findsOneWidget);
 
     await tester.enterText(
@@ -103,7 +72,7 @@ void main() {
     await tester.tap(connectButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Connected to Music Server'), findsOneWidget);
+    expect(find.text('Music library'), findsOneWidget);
     expect(credentials.accessToken, 'test-access-token');
   });
 
@@ -198,6 +167,8 @@ void main() {
     expect(find.text('Real Track'), findsOneWidget);
 
     await tester.tap(find.text('Real Track'));
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.text('Real Track'));
     await tester.pumpAndSettle();
 
     expect(playbackController.loadedRemoteSource?.title, 'Real Track');
@@ -241,12 +212,19 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Matching Song'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find
+          .descendant(
+            of: find.byType(CustomScrollView),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     await tester.pumpAndSettle();
     expect(find.text('Songs'), findsOneWidget);
     expect(find.text('Matching Song'), findsOneWidget);
 
+    await tester.tap(find.text('Matching Song'));
+    await tester.pump(const Duration(milliseconds: 60));
     await tester.tap(find.text('Matching Song'));
     await tester.pumpAndSettle();
 
@@ -285,6 +263,8 @@ void main() {
     expect(find.text('Real Album'), findsOneWidget);
 
     await tester.tap(find.text('A Library Song'));
+    await tester.pump(const Duration(milliseconds: 60));
+    await tester.tap(find.text('A Library Song'));
     await tester.pumpAndSettle();
 
     expect(playbackController.loadedRemoteSource?.title, 'A Library Song');
@@ -317,6 +297,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Real Album'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Real Track'));
+    await tester.pump(const Duration(milliseconds: 60));
     await tester.tap(find.text('Real Track'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Show lyrics'));
@@ -360,15 +342,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('All artists'), findsOneWidget);
-    expect(find.text('Real Album'), findsOneWidget);
+    expect(find.text('Albums & appearances'), findsOneWidget);
 
-    final artistAlbum = find.text('Real Album');
+    final artistAlbum = find.text('Real Album').last;
     await tester.ensureVisible(artistAlbum);
     await tester.pumpAndSettle();
     await tester.tap(artistAlbum);
     await tester.pumpAndSettle();
 
     expect(find.text('Real Track'), findsOneWidget);
+    await tester.tap(find.text('Real Track'));
+    await tester.pump(const Duration(milliseconds: 60));
     await tester.tap(find.text('Real Track'));
     await tester.pumpAndSettle();
 
@@ -400,7 +384,8 @@ void main() {
 
     expect(find.text('1 album'), findsOneWidget);
     expect(find.text('Real Album'), findsOneWidget);
-    expect(find.text('Real Artist · 2026'), findsOneWidget);
+    expect(find.text('Real Artist'), findsOneWidget);
+    expect(find.text(' · 2026'), findsOneWidget);
     expect(find.text('Load more'), findsNothing);
 
     await tester.tap(find.text('Real Album'));
@@ -409,14 +394,16 @@ void main() {
     expect(find.text('All albums'), findsOneWidget);
     expect(find.text('Real Track'), findsOneWidget);
     expect(find.text('3:12'), findsOneWidget);
-    expect(find.byKey(const ValueKey('play')), findsNothing);
+    expect(find.byTooltip('Play Real Track'), findsNothing);
 
     final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await mouse.addPointer();
     await mouse.moveTo(tester.getCenter(find.text('Real Track')));
     await tester.pump(const Duration(milliseconds: 70));
-    expect(find.byKey(const ValueKey('play')), findsOneWidget);
+    expect(find.byTooltip('Play Real Track'), findsOneWidget);
 
+    await tester.tap(find.text('Real Track'));
+    await tester.pump(const Duration(milliseconds: 60));
     await tester.tap(find.text('Real Track'));
     await tester.pumpAndSettle();
 
@@ -613,6 +600,7 @@ class FakeJellyfinApi implements JellyfinApi {
           duration: Duration(minutes: 3, seconds: 5),
         ),
         album: 'Real Album',
+        albumId: 'album-id',
       ),
     ],
     totalCount: 1,
@@ -630,6 +618,99 @@ class FakeJellyfinApi implements JellyfinApi {
       LyricLine(text: 'Remembered line', start: Duration(seconds: 12)),
     ],
   );
+
+  @override
+  Future<Uint8List?> getArtwork({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+    required String? imageTag,
+  }) async => null;
+  @override
+  Future<PlaylistPage> getPlaylists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const PlaylistPage(playlists: [], totalCount: 0);
+  @override
+  Future<SongPage> getPlaylistTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required int startIndex,
+    required int limit,
+  }) async => const SongPage(songs: [], totalCount: 0);
+
+  @override
+  Future<PlaylistSummary> createPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String name,
+    List<String> itemIds = const [],
+  }) async => PlaylistSummary(
+    id: 'new-playlist',
+    title: name,
+    trackCount: itemIds.length,
+  );
+  @override
+  Future<bool> canEditPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => true;
+  @override
+  Future<PlaylistSummary> getPlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => PlaylistSummary(id: playlistId, title: 'Playlist');
+  @override
+  Future<PlaylistSummary> updatePlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+  }) async =>
+      PlaylistSummary(id: playlistId, title: name, description: description);
+  @override
+  Future<void> renamePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+  }) async {}
+  @override
+  Future<void> addPlaylistSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {}
+  @override
+  Future<void> removePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+  }) async {}
+  @override
+  Future<void> movePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+    required int newIndex,
+  }) async {}
+  @override
+  Future<void> deletePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async {}
 
   @override
   Future<LibrarySearchResults> searchLibrary({

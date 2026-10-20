@@ -1,15 +1,21 @@
 import 'dart:typed_data';
 
+import '../playback/playback_queue_controller.dart';
+
 class StoredQueueItem {
   const StoredQueueItem({
     required this.itemId,
     required this.title,
     required this.artist,
+    this.artworkId,
+    this.artworkTag,
   });
 
   final String itemId;
   final String title;
   final String artist;
+  final String? artworkId;
+  final String? artworkTag;
 }
 
 class StoredPlaybackState {
@@ -21,6 +27,9 @@ class StoredPlaybackState {
     required this.position,
     required this.volume,
     this.artworkBytes,
+    this.shuffleEnabled = false,
+    this.repeatMode = PlaybackRepeatMode.off,
+    this.originalOrder = const [],
   });
 
   final String serverId;
@@ -30,6 +39,9 @@ class StoredPlaybackState {
   final Duration position;
   final double volume;
   final Uint8List? artworkBytes;
+  final bool shuffleEnabled;
+  final PlaybackRepeatMode repeatMode;
+  final List<int> originalOrder;
 }
 
 abstract interface class PlaybackStateStore {

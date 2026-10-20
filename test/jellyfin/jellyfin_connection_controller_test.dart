@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:gaze/library/playlist_summary.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gaze/jellyfin/jellyfin_api.dart';
 import 'package:gaze/jellyfin/jellyfin_connection_controller.dart';
@@ -123,6 +125,26 @@ void main() {
         totalCount: 1,
       ),
     );
+    await metadata.writeSongs(
+      const SongLibraryCacheKey(
+        serverId: 'test-server-id',
+        userId: 'test-user-id',
+      ),
+      const SongPage(
+        songs: [
+          SongSummary(
+            track: TrackSummary(
+              id: 'saved-song',
+              title: 'Saved Song',
+              artist: 'Artist',
+              duration: Duration(minutes: 3),
+            ),
+            album: 'Saved Album',
+          ),
+        ],
+        totalCount: 1,
+      ),
+    );
     final controller = JellyfinConnectionController(
       credentialStore: credentials,
       metadataCache: metadata,
@@ -134,12 +156,14 @@ void main() {
       sort: AlbumSort.title,
       startIndex: 0,
     );
+    final songs = await controller.loadCachedSongs();
 
     expect(controller.state.status, JellyfinConnectionStatus.offline);
     expect(controller.state.canBrowseLibrary, isTrue);
     expect(credentials.accessToken, 'saved-token');
     expect(page.albums.single.title, 'Saved Album');
     expect(page.isStale, isTrue);
+    expect(songs!.songs.single.track.title, 'Saved Song');
     await controller.dispose();
     await metadata.close();
   });
@@ -270,6 +294,99 @@ class RecordingJellyfinApi implements JellyfinApi {
   }) async => null;
 
   @override
+  Future<Uint8List?> getArtwork({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+    required String? imageTag,
+  }) async => null;
+  @override
+  Future<PlaylistPage> getPlaylists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const PlaylistPage(playlists: [], totalCount: 0);
+  @override
+  Future<SongPage> getPlaylistTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required int startIndex,
+    required int limit,
+  }) async => const SongPage(songs: [], totalCount: 0);
+
+  @override
+  Future<PlaylistSummary> createPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String name,
+    List<String> itemIds = const [],
+  }) async => PlaylistSummary(
+    id: 'new-playlist',
+    title: name,
+    trackCount: itemIds.length,
+  );
+  @override
+  Future<bool> canEditPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => true;
+  @override
+  Future<PlaylistSummary> getPlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => PlaylistSummary(id: playlistId, title: 'Playlist');
+  @override
+  Future<PlaylistSummary> updatePlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+  }) async =>
+      PlaylistSummary(id: playlistId, title: name, description: description);
+  @override
+  Future<void> renamePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+  }) async {}
+  @override
+  Future<void> addPlaylistSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {}
+  @override
+  Future<void> removePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+  }) async {}
+  @override
+  Future<void> movePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+    required int newIndex,
+  }) async {}
+  @override
+  Future<void> deletePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async {}
+
+  @override
   Future<LibrarySearchResults> searchLibrary({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -393,6 +510,99 @@ class FailingJellyfinApi implements JellyfinApi {
     required JellyfinSession session,
     required String trackId,
   }) async => throw error;
+
+  @override
+  Future<Uint8List?> getArtwork({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+    required String? imageTag,
+  }) async => null;
+  @override
+  Future<PlaylistPage> getPlaylists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  }) async => const PlaylistPage(playlists: [], totalCount: 0);
+  @override
+  Future<SongPage> getPlaylistTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required int startIndex,
+    required int limit,
+  }) async => const SongPage(songs: [], totalCount: 0);
+
+  @override
+  Future<PlaylistSummary> createPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String name,
+    List<String> itemIds = const [],
+  }) async => PlaylistSummary(
+    id: 'new-playlist',
+    title: name,
+    trackCount: itemIds.length,
+  );
+  @override
+  Future<bool> canEditPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => true;
+  @override
+  Future<PlaylistSummary> getPlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async => PlaylistSummary(id: playlistId, title: 'Playlist');
+  @override
+  Future<PlaylistSummary> updatePlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+  }) async =>
+      PlaylistSummary(id: playlistId, title: name, description: description);
+  @override
+  Future<void> renamePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+  }) async {}
+  @override
+  Future<void> addPlaylistSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required List<String> itemIds,
+  }) async {}
+  @override
+  Future<void> removePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+  }) async {}
+  @override
+  Future<void> movePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+    required int newIndex,
+  }) async {}
+  @override
+  Future<void> deletePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  }) async {}
 
   @override
   Future<LibrarySearchResults> searchLibrary({

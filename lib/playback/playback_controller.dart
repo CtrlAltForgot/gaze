@@ -10,6 +10,8 @@ class RemotePlaybackSource {
     this.startPosition = Duration.zero,
     this.headers = const {},
     this.artworkBytes,
+    this.artworkId,
+    this.artworkTag,
   });
 
   final Uri uri;
@@ -19,6 +21,8 @@ class RemotePlaybackSource {
   final String? itemId;
   final Duration startPosition;
   final Uint8List? artworkBytes;
+  final String? artworkId;
+  final String? artworkTag;
 }
 
 enum PlaybackStatus {

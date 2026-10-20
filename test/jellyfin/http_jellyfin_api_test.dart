@@ -169,50 +169,115 @@ void main() {
       api.close();
     });
 
-    test('loads albums and artwork with authenticated headers', () async {
-      final client = MockClient((request) async {
-        expect(request.url.query, isNot(contains('private-access-token')));
+    test(
+      'loads album metadata before requesting authenticated artwork',
+      () async {
+        final client = MockClient((request) async {
+          expect(request.url.query, isNot(contains('private-access-token')));
+          expect(
+            request.headers['authorization'],
+            contains('Token="private-access-token"'),
+          );
+          if (request.url.path.endsWith('/Items/album-id/Images/Primary')) {
+            return http.Response.bytes([1, 2, 3], 200);
+          }
+          expect(request.url.path, '/Users/user-id/Items');
+          expect(request.url.queryParameters['IncludeItemTypes'], 'MusicAlbum');
+          expect(request.url.queryParameters['SortBy'], 'DateCreated');
+          return http.Response(
+            jsonEncode({
+              'Items': [
+                {
+                  'Id': 'album-id',
+                  'Name': 'Real Album',
+                  'AlbumArtist': 'Real Artist',
+                  'ImageTags': {'Primary': 'image-tag'},
+                },
+              ],
+            }),
+            200,
+          );
+        });
+        final api = _createApi(client);
+
+        final albums = await api.getRecentlyAddedAlbums(
+          address: JellyfinServerAddress.parse('http://music.local:8096'),
+          session: const JellyfinSession(
+            accessToken: 'private-access-token',
+            userId: 'user-id',
+            userName: 'listener',
+          ),
+        );
+
+        expect(albums, hasLength(1));
+        expect(albums.single.title, 'Real Album');
+        expect(albums.single.artist, 'Real Artist');
+        expect(albums.single.artworkBytes, isNull);
         expect(
-          request.headers['authorization'],
-          contains('Token="private-access-token"'),
+          await api.getArtwork(
+            address: JellyfinServerAddress.parse('http://music.local:8096'),
+            session: const JellyfinSession(
+              accessToken: 'private-access-token',
+              userId: 'user-id',
+              userName: 'listener',
+            ),
+            itemId: albums.single.id,
+            imageTag: albums.single.imageTag!,
+          ),
+          [1, 2, 3],
         );
-        if (request.url.path.endsWith('/Items/album-id/Images/Primary')) {
-          return http.Response.bytes([1, 2, 3], 200);
-        }
-        expect(request.url.path, '/Users/user-id/Items');
-        expect(request.url.queryParameters['IncludeItemTypes'], 'MusicAlbum');
-        expect(request.url.queryParameters['SortBy'], 'DateCreated');
-        return http.Response(
-          jsonEncode({
-            'Items': [
-              {
-                'Id': 'album-id',
-                'Name': 'Real Album',
-                'AlbumArtist': 'Real Artist',
-                'ImageTags': {'Primary': 'image-tag'},
-              },
-            ],
+        api.close();
+      },
+    );
+
+    test(
+      'unknown artwork tags resolve current song and album covers without caching a miss',
+      () async {
+        var available = false;
+        final paths = <String>[];
+        final api = _createApi(
+          MockClient((request) async {
+            paths.add(request.url.path);
+            expect(
+              request.headers['authorization'],
+              contains('Token="private-access-token"'),
+            );
+            if (request.url.path.endsWith('/Images/Primary')) {
+              expect(request.url.path, '/Items/album-id/Images/Primary');
+              return http.Response.bytes([1, 2, 3], 200);
+            }
+            expect(request.url.path, '/Users/user-id/Items/song-id');
+            return http.Response(
+              jsonEncode({
+                'Id': 'song-id',
+                'AlbumId': 'album-id',
+                if (available) 'AlbumPrimaryImageTag': 'fresh-cover',
+              }),
+              200,
+            );
           }),
-          200,
         );
-      });
-      final api = _createApi(client);
-
-      final albums = await api.getRecentlyAddedAlbums(
-        address: JellyfinServerAddress.parse('http://music.local:8096'),
-        session: const JellyfinSession(
-          accessToken: 'private-access-token',
-          userId: 'user-id',
-          userName: 'listener',
-        ),
-      );
-
-      expect(albums, hasLength(1));
-      expect(albums.single.title, 'Real Album');
-      expect(albums.single.artist, 'Real Artist');
-      expect(albums.single.artworkBytes, [1, 2, 3]);
-      api.close();
-    });
+        Future<List<int>?> load() => api.getArtwork(
+          address: JellyfinServerAddress.parse('https://music.example'),
+          session: const JellyfinSession(
+            accessToken: 'private-access-token',
+            userId: 'user-id',
+            userName: 'listener',
+          ),
+          itemId: 'song-id',
+          imageTag: null,
+        );
+        expect(await load(), isNull);
+        available = true;
+        expect(await load(), [1, 2, 3]);
+        expect(paths, [
+          '/Users/user-id/Items/song-id',
+          '/Users/user-id/Items/song-id',
+          '/Items/album-id/Images/Primary',
+        ]);
+        api.close();
+      },
+    );
 
     test('validates a restored session without a token URL', () async {
       final client = MockClient((request) async {
@@ -290,7 +355,7 @@ void main() {
               {
                 'Id': 'track-id',
                 'Name': 'Real Track',
-                'Artists': ['Real Artist'],
+                'Artists': ['Earth, Wind & Fire', 'Guest'],
                 'IndexNumber': 1,
                 'ParentIndexNumber': 1,
                 'RunTimeTicks': 1920000000,
@@ -313,7 +378,7 @@ void main() {
       );
 
       expect(tracks.single.title, 'Real Track');
-      expect(tracks.single.artist, 'Real Artist');
+      expect(tracks.single.artist, 'Earth, Wind & Fire; Guest');
       expect(tracks.single.duration, const Duration(minutes: 3, seconds: 12));
       api.close();
     });

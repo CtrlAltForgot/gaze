@@ -1,10 +1,17 @@
+import 'artist_links.dart';
+import 'marquee_text.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../design/gaze_motion.dart';
 
 import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/album_summary.dart';
 import '../library/track_summary.dart';
+import '../library/song_summary.dart';
+import 'song_row.dart';
 import 'smooth_scroll_controller.dart';
+import 'track_selection.dart';
 
 class AlbumsPage extends StatefulWidget {
   const AlbumsPage({
@@ -47,6 +54,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
   DateTime? _cachedAt;
   String? _error;
   AlbumSummary? _selectedAlbum;
+  StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
+  int _request = 0;
 
   bool get _connected => widget.connectionController.state.canBrowseLibrary;
   bool get _hasMore => _albums.length < _totalCount;
@@ -55,6 +64,17 @@ class _AlbumsPageState extends State<AlbumsPage> {
   void initState() {
     super.initState();
     _selectedAlbum = widget.initialAlbum;
+    _connectionSubscription = widget.connectionController.states.listen((
+      state,
+    ) {
+      if (!mounted) return;
+      ++_request;
+      if (state.canBrowseLibrary && _selectedAlbum == null) {
+        unawaited(_loadFirstPage());
+      } else {
+        setState(() {});
+      }
+    });
     _scrollController.addListener(_loadAhead);
     if (_connected && _selectedAlbum == null) {
       _loadFirstPage();
@@ -63,6 +83,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
 
   @override
   void dispose() {
+    ++_request;
+    unawaited(_connectionSubscription?.cancel());
     _scrollController
       ..removeListener(_loadAhead)
       ..dispose();
@@ -88,67 +110,67 @@ class _AlbumsPageState extends State<AlbumsPage> {
     });
   }
 
-  Future<void> _loadFirstPage() async {
+  Future<void> _loadFirstPage({bool forceRefresh = false}) async {
+    final request = ++_request;
+    bool active() => mounted && request == _request;
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
-      _albums.clear();
-      _totalCount = 0;
     });
     try {
-      final page = await widget.connectionController.loadAlbums(
+      await for (final page in widget.connectionController.watchAlbums(
         sort: _sort,
         startIndex: 0,
         limit: _pageSize,
-      );
-      if (mounted) {
+        forceRefresh: forceRefresh,
+      )) {
+        if (!active()) return;
         setState(() {
-          _albums.addAll(page.albums);
+          _albums
+            ..clear()
+            ..addAll(page.albums);
           _totalCount = page.totalCount;
           _showingStaleData = page.isStale;
           _cachedAt = page.cachedAt;
         });
-        _scheduleLoadAhead();
       }
     } on Exception catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
-      }
+      if (active()) setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
+      if (active()) {
         setState(() => _loading = false);
+        _scheduleLoadAhead();
       }
     }
   }
 
   Future<void> _loadMore() async {
-    if (_loadingMore || !_hasMore) {
-      return;
-    }
+    if (_loading || _loadingMore || !_hasMore || _error != null) return;
+    final request = _request;
+    final offset = _albums.length;
+    bool active() => mounted && request == _request;
     setState(() => _loadingMore = true);
-    setState(() => _error = null);
     try {
-      final page = await widget.connectionController.loadAlbums(
+      await for (final page in widget.connectionController.watchAlbums(
         sort: _sort,
-        startIndex: _albums.length,
+        startIndex: offset,
         limit: _pageSize,
-      );
-      if (mounted) {
+      )) {
+        if (!active()) return;
         setState(() {
-          _albums.addAll(page.albums);
+          _albums.replaceRange(offset, _albums.length, page.albums);
           _totalCount = page.totalCount;
           _showingStaleData = _showingStaleData || page.isStale;
           _cachedAt ??= page.cachedAt;
         });
-        _scheduleLoadAhead();
       }
     } on Exception catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
-      }
+      if (active()) setState(() => _error = error.toString());
     } finally {
-      if (mounted) {
+      if (active()) {
         setState(() => _loadingMore = false);
+        if (_albums.length > offset) _scheduleLoadAhead();
       }
     }
   }
@@ -157,17 +179,29 @@ class _AlbumsPageState extends State<AlbumsPage> {
     if (sort == null || sort == _sort) {
       return;
     }
-    setState(() => _sort = sort);
+    setState(() {
+      _sort = sort;
+      _albums.clear();
+      _totalCount = 0;
+    });
     _loadFirstPage();
   }
 
   Future<void> _retryConnection() async {
     await widget.connectionController.reconnect();
-    await _loadFirstPage();
+    await _loadFirstPage(forceRefresh: true);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => GazeSwap(
+    alignment: Alignment.topLeft,
+    child: KeyedSubtree(
+      key: ValueKey(_selectedAlbum?.id ?? 'albums'),
+      child: _buildContent(context),
+    ),
+  );
+
+  Widget _buildContent(BuildContext context) {
     _scrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
       context,
     );
@@ -259,8 +293,8 @@ class _AlbumsPageState extends State<AlbumsPage> {
                     Expanded(
                       child: Text(
                         _cachedAt == null
-                            ? 'Showing saved library data while Jellyfin is unavailable.'
-                            : 'Showing saved library data from ${_cachedTime(_cachedAt!)} while Jellyfin is unavailable.',
+                            ? 'Showing your saved library.'
+                            : 'Showing your saved library from ${_cachedTime(_cachedAt!)}.',
                       ),
                     ),
                     TextButton(
@@ -287,7 +321,7 @@ class _AlbumsPageState extends State<AlbumsPage> {
         onPressed: widget.onConnect,
       );
     }
-    if (_loading) {
+    if (_loading && _albums.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null && _albums.isEmpty) {
@@ -327,6 +361,7 @@ class _AlbumsPageState extends State<AlbumsPage> {
                   childAspectRatio: 0.76,
                 ),
                 itemBuilder: (context, index) => _AlbumTile(
+                  connectionController: widget.connectionController,
                   album: _albums[index],
                   onTap: () => setState(() => _selectedAlbum = _albums[index]),
                 ),
@@ -339,7 +374,10 @@ class _AlbumsPageState extends State<AlbumsPage> {
                   child: Center(
                     child: _error != null
                         ? TextButton.icon(
-                            onPressed: _loadMore,
+                            onPressed: () {
+                              setState(() => _error = null);
+                              _loadMore();
+                            },
                             icon: const Icon(Icons.refresh_rounded),
                             label: const Text('Retry loading albums'),
                           )
@@ -370,7 +408,13 @@ String _cachedTime(DateTime value) {
 }
 
 class _AlbumTile extends StatelessWidget {
-  const _AlbumTile({required this.album, required this.onTap});
+  const _AlbumTile({
+    required this.album,
+    required this.onTap,
+    required this.connectionController,
+  });
+
+  final JellyfinConnectionController connectionController;
 
   final AlbumSummary album;
   final VoidCallback onTap;
@@ -386,21 +430,24 @@ class _AlbumTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _Artwork(album: album)),
+            Expanded(
+              child: _Artwork(
+                album: album,
+                connectionController: connectionController,
+              ),
+            ),
             const SizedBox(height: GazeSpacing.small),
-            Text(
+            MarqueeText(
               album.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              hoverOnly: true,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: GazeSpacing.xSmall),
-            Text(
-              album.year == null
-                  ? album.artist
-                  : '${album.artist} · ${album.year}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            Row(
+              children: [
+                Expanded(child: ArtistLinks(album.artist, hoverOnly: true)),
+                if (album.year != null) Text(' · ${album.year}'),
+              ],
             ),
           ],
         ),
@@ -431,21 +478,32 @@ class _AlbumDetail extends StatefulWidget {
 class _AlbumDetailState extends State<_AlbumDetail> {
   List<TrackSummary>? _tracks;
   String? _error;
+  StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
   final SmoothScrollController _scrollController = SmoothScrollController();
 
   @override
   void initState() {
     super.initState();
+    _connectionSubscription = widget.connectionController.states.listen((
+      state,
+    ) {
+      if (mounted && state.isConnected && _tracks == null)
+        unawaited(_loadTracks());
+    });
     _loadTracks();
   }
 
   @override
   void dispose() {
+    unawaited(_connectionSubscription?.cancel());
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _loadTracks() async {
+    if (widget.connectionController.state.status ==
+        JellyfinConnectionStatus.restoring)
+      return;
     setState(() => _error = null);
     try {
       final tracks = await widget.connectionController.loadAlbumTracks(
@@ -462,7 +520,10 @@ class _AlbumDetailState extends State<_AlbumDetail> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackSelectionScope(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     _scrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
       context,
     );
@@ -486,7 +547,10 @@ class _AlbumDetailState extends State<_AlbumDetail> {
                   children: [
                     SizedBox.square(
                       dimension: 220,
-                      child: _Artwork(album: widget.album),
+                      child: _Artwork(
+                        album: widget.album,
+                        connectionController: widget.connectionController,
+                      ),
                     ),
                     const SizedBox(width: GazeSpacing.xLarge),
                     Expanded(
@@ -503,7 +567,7 @@ class _AlbumDetailState extends State<_AlbumDetail> {
                             style: Theme.of(context).textTheme.headlineLarge,
                           ),
                           const SizedBox(height: GazeSpacing.small),
-                          Text(widget.album.artist),
+                          ArtistLinks(widget.album.artist),
                           if (widget.album.year case final year?) Text('$year'),
                         ],
                       ),
@@ -549,10 +613,20 @@ class _AlbumDetailState extends State<_AlbumDetail> {
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final track = _tracks![index];
-                return _TrackRow(
-                  track: track,
+                return SongRow(
+                  key: ValueKey('${widget.album.id}:${track.id}:$index'),
+                  song: SongSummary(
+                    track: track,
+                    album: widget.album.title,
+                    albumId: widget.album.id,
+                    imageTag: widget.album.imageTag,
+                  ),
+                  connectionController: widget.connectionController,
+                  showAlbum: false,
                   displayNumber: track.trackNumber ?? index + 1,
-                  onPlay: () => widget.onPlayTrack(_tracks!, index),
+                  onPlay: widget.connectionController.state.isConnected
+                      ? (_) => widget.onPlayTrack(_tracks!, index)
+                      : null,
                 );
               },
             ),
@@ -562,76 +636,24 @@ class _AlbumDetailState extends State<_AlbumDetail> {
   }
 }
 
-class _TrackRow extends StatefulWidget {
-  const _TrackRow({
-    required this.track,
-    required this.displayNumber,
-    required this.onPlay,
-  });
-
-  final TrackSummary track;
-  final int displayNumber;
-  final VoidCallback onPlay;
-
-  @override
-  State<_TrackRow> createState() => _TrackRowState();
-}
-
-class _TrackRowState extends State<_TrackRow> {
-  bool _hovered = false;
-  bool _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final showPlay = _hovered || _focused;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Focus(
-        onFocusChange: (value) => setState(() => _focused = value),
-        child: ListTile(
-          onTap: widget.onPlay,
-          leading: SizedBox(
-            width: 32,
-            child: showPlay
-                ? const Icon(Icons.play_arrow_rounded, key: ValueKey('play'))
-                : Text('${widget.displayNumber}'),
-          ),
-          title: Text(widget.track.title),
-          subtitle: Text(widget.track.artist),
-          trailing: Text(_durationLabel(widget.track.duration)),
-        ),
-      ),
-    );
-  }
-}
-
 class _Artwork extends StatelessWidget {
-  const _Artwork({required this.album});
-
+  const _Artwork({required this.album, required this.connectionController});
   final AlbumSummary album;
+  final JellyfinConnectionController connectionController;
 
   @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: GazeColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(GazeRadii.card),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(GazeRadii.card),
-        child: album.artworkBytes == null
-            ? const Center(
-                child: Icon(
-                  Icons.album_rounded,
-                  size: 48,
-                  color: GazeColors.textSecondary,
-                ),
-              )
-            : Image.memory(album.artworkBytes!, fit: BoxFit.cover),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(GazeRadii.card),
+    child: LibraryArtwork(
+      connectionController: connectionController,
+      itemId: album.id,
+      imageTag: album.imageTag,
+      bytes: album.artworkBytes,
+      dimension: double.infinity,
+      icon: Icons.album_rounded,
+      iconSize: 48,
+    ),
+  );
 }
 
 class _PageMessage extends StatelessWidget {
@@ -679,9 +701,3 @@ String _sortLabel(AlbumSort sort) => switch (sort) {
   AlbumSort.artist => 'Artist',
   AlbumSort.releaseYear => 'Release year',
 };
-
-String _durationLabel(Duration duration) {
-  final minutes = duration.inMinutes;
-  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
-}

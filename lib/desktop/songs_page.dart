@@ -1,92 +1,176 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-
 import '../design/gaze_theme.dart';
 import '../jellyfin/jellyfin_connection_controller.dart';
 import '../library/song_summary.dart';
 import 'smooth_scroll_controller.dart';
+import 'track_selection.dart';
+import 'song_row.dart';
 
 class SongsPage extends StatefulWidget {
   const SongsPage({
     required this.connectionController,
     required this.onConnect,
     required this.onPlaySongs,
+    required this.onQueueSong,
     super.key,
   });
-
   final JellyfinConnectionController connectionController;
   final VoidCallback onConnect;
-  final Future<void> Function(List<SongSummary> songs, int startIndex)
-  onPlaySongs;
-
+  final Future<void> Function(List<SongSummary>, int) onPlaySongs;
+  final Future<void> Function(SongSummary, bool next) onQueueSong;
   @override
   State<SongsPage> createState() => _SongsPageState();
 }
 
 class _SongsPageState extends State<SongsPage> {
-  static const _pageSize = 500;
-
   final SmoothScrollController _scrollController = SmoothScrollController();
-  final List<SongSummary> _songs = [];
+  StreamSubscription<JellyfinConnectionState>? _connectionSubscription;
+  List<SongSummary> _songs = [];
   int _totalCount = 0;
-  bool _loading = false;
+  int _refreshedCount = 0;
+  int _refreshTotal = 0;
+  int _request = 0;
+  bool _refreshing = false;
+  bool _saved = false;
+  bool _retrying = false;
   String? _error;
-
-  bool get _connected => widget.connectionController.state.isConnected;
+  String? _account;
+  bool get _online => widget.connectionController.state.isConnected;
+  bool get _browse => widget.connectionController.state.canBrowseLibrary;
+  bool get _canPlay => _online;
+  String? get _currentAccount {
+    final state = widget.connectionController.state;
+    return state.serverInfo == null || state.session == null
+        ? null
+        : '${state.serverInfo!.id}:${state.session!.userId}';
+  }
 
   @override
   void initState() {
     super.initState();
-    if (_connected) {
-      _loadFirstPage();
-    }
+    _account = _currentAccount;
+    _connectionSubscription = widget.connectionController.states.listen((
+      state,
+    ) {
+      if (!mounted) return;
+      _request++;
+      if (state.canBrowseLibrary) {
+        final account = _currentAccount;
+        if (account != _account) {
+          _songs = [];
+          _saved = false;
+          _totalCount = 0;
+        }
+        _account = account;
+        unawaited(_load());
+      } else {
+        setState(() {
+          _refreshing = false;
+          if (state.status != JellyfinConnectionStatus.connecting) {
+            _songs = [];
+            _saved = false;
+            _totalCount = 0;
+          }
+        });
+      }
+    });
+    if (_browse) unawaited(_load());
   }
 
   @override
   void dispose() {
+    _request++;
+    unawaited(_connectionSubscription?.cancel());
     _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFirstPage() async {
+  Future<void> _load() async {
+    final request = ++_request;
+    bool active() => mounted && request == _request;
     setState(() {
-      _loading = true;
+      _refreshing = true;
       _error = null;
-      _songs.clear();
-      _totalCount = 0;
+      _refreshedCount = 0;
+      _refreshTotal = 0;
     });
     try {
-      while (mounted) {
-        final page = await widget.connectionController.loadSongs(
-          startIndex: _songs.length,
-          limit: _pageSize,
-        );
-        if (!mounted) {
-          return;
-        }
+      final cached = await widget.connectionController.loadCachedSongs();
+      if (!active()) return;
+      if (cached != null)
         setState(() {
-          _songs.addAll(page.songs);
-          _totalCount = page.totalCount;
+          _songs = cached.songs;
+          _totalCount = cached.totalCount;
+          _saved = true;
         });
-        if (page.songs.isEmpty || _songs.length >= _totalCount) {
-          break;
-        }
+      if (!_online) return;
+      SongPage? latest;
+      await for (final page in widget.connectionController.refreshSongs(
+        isCancelled: () => !active(),
+      )) {
+        if (!active()) return;
+        latest = page;
+        setState(() {
+          _refreshedCount = page.songs.length;
+          _refreshTotal = page.totalCount;
+          if (!_saved) {
+            _songs = page.songs;
+            _totalCount = page.totalCount;
+          }
+        });
       }
+      if (active() && latest != null && _online)
+        setState(() {
+          _songs = latest!.songs;
+          _totalCount = latest.totalCount;
+          _saved = false;
+        });
     } on Exception catch (error) {
-      if (mounted) {
-        setState(() => _error = error.toString());
+      if (active()) setState(() => _error = error.toString());
+    } finally {
+      if (active()) setState(() => _refreshing = false);
+    }
+  }
+
+  Future<void> _retry() async {
+    if (_retrying || _refreshing) return;
+    setState(() => _retrying = true);
+    try {
+      if (_online) {
+        await _load();
+      } else {
+        await widget.connectionController.reconnect();
       }
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
+  Future<void> _act(Future<void> Function() action) async {
+    try {
+      await action();
+    } on Exception catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      TrackSelectionScope(child: _buildContent(context));
+
+  Widget _buildContent(BuildContext context) {
     _scrollController.smoothingEnabled = !MediaQuery.disableAnimationsOf(
       context,
     );
+    final loadingCaption = _saved
+        ? 'Updating library…'
+        : _refreshedCount == 0
+        ? 'Loading your library…'
+        : 'Loading $_refreshedCount of $_refreshTotal songs…';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -97,213 +181,136 @@ class _SongsPageState extends State<SongsPage> {
             GazeSpacing.xLarge,
             GazeSpacing.medium,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              Text('Songs', style: Theme.of(context).textTheme.headlineLarge),
-              const SizedBox(height: GazeSpacing.xSmall),
-              Text(
-                _loading
-                    ? _totalCount > 0
-                          ? 'Loading ${_songs.length} of $_totalCount songs…'
-                          : 'Loading your library…'
-                    : _totalCount == 1
-                    ? '1 song'
-                    : '$_totalCount songs',
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Songs',
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: GazeSpacing.xSmall),
+                    Text(
+                      _songs.isEmpty && _refreshing
+                          ? loadingCaption
+                          : '${_totalCount == 1 ? '1 song' : '$_totalCount songs'}${_refreshing ? ' · $loadingCaption' : ''}',
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh songs',
+                onPressed: _refreshing || _retrying || !_browse ? null : _retry,
+                icon: const Icon(Icons.refresh_rounded),
               ),
             ],
           ),
         ),
-        Expanded(child: _buildBody()),
+        if (_refreshing) const LinearProgressIndicator(minHeight: 2),
+        if ((_browse && !_online) || _error != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: GazeSpacing.xLarge,
+              vertical: GazeSpacing.small,
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.cloud_off_outlined, size: 20),
+                const SizedBox(width: GazeSpacing.small),
+                Expanded(
+                  child: Text(
+                    !_online
+                        ? 'Offline — showing saved song details. Streaming is unavailable.'
+                        : 'Could not refresh songs. ${_songs.isEmpty ? '' : 'Your loaded songs are still here. '}${_error!}',
+                  ),
+                ),
+                TextButton(
+                  onPressed: _refreshing || _retrying ? null : _retry,
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        Expanded(child: _body()),
       ],
     );
   }
 
-  Widget _buildBody() {
-    if (!_connected) {
-      return _SongsMessage(
-        icon: Icons.cloud_outlined,
-        title: 'Connect your Jellyfin library',
-        message: 'Connect before browsing songs.',
-        buttonLabel: 'Connect Jellyfin',
-        onPressed: widget.onConnect,
-      );
-    }
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (_error != null && _songs.isEmpty) {
-      return _SongsMessage(
-        icon: Icons.cloud_off_outlined,
-        title: 'Songs could not be loaded',
-        message: _error!,
-        buttonLabel: 'Try again',
-        onPressed: _loadFirstPage,
-      );
-    }
-    if (_songs.isEmpty) {
-      return const _SongsMessage(
-        icon: Icons.music_note_rounded,
-        title: 'No songs found',
-        message: 'Jellyfin returned no songs for this account.',
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final showAlbum = constraints.maxWidth >= 760;
-        return CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                GazeSpacing.xLarge,
-                GazeSpacing.small,
-                GazeSpacing.xLarge,
-                0,
-              ),
-              sliver: SliverList.separated(
-                itemCount: _songs.length,
-                separatorBuilder: (_, _) => Divider(
-                  height: 1,
-                  color: Colors.white.withValues(alpha: .10),
-                ),
-                itemBuilder: (context, index) {
-                  final song = _songs[index];
-                  return _SongRow(
-                    song: song,
-                    showAlbum: showAlbum,
-                    onPlay: () => widget.onPlaySongs(_songs, index),
-                  );
-                },
-              ),
-            ),
-            const SliverPadding(
-              padding: EdgeInsets.only(bottom: GazeSpacing.xLarge),
-            ),
+  Widget _message(
+    String title,
+    String message, {
+    VoidCallback? action,
+    String label = 'Retry',
+  }) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(GazeSpacing.xLarge),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.headlineSmall,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: GazeSpacing.small),
+          Text(message, textAlign: TextAlign.center),
+          if (action != null) ...[
+            const SizedBox(height: GazeSpacing.medium),
+            FilledButton(onPressed: action, child: Text(label)),
           ],
-        );
-      },
-    );
-  }
-}
-
-class _SongRow extends StatelessWidget {
-  const _SongRow({
-    required this.song,
-    required this.showAlbum,
-    required this.onPlay,
-  });
-
-  final SongSummary song;
-  final bool showAlbum;
-  final VoidCallback onPlay;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPlay,
-      borderRadius: BorderRadius.circular(GazeRadii.control),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: GazeSpacing.small),
-        child: Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(GazeRadii.control),
-              child: ColoredBox(
-                color: GazeColors.surfaceRaised,
-                child: SizedBox.square(
-                  dimension: 52,
-                  child: song.artworkBytes == null
-                      ? const Icon(
-                          Icons.music_note_rounded,
-                          color: GazeColors.textSecondary,
-                        )
-                      : Image.memory(song.artworkBytes!, fit: BoxFit.cover),
-                ),
-              ),
-            ),
-            const SizedBox(width: GazeSpacing.medium),
-            Expanded(
-              flex: 5,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    song.track.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: GazeSpacing.xSmall),
-                  Text(
-                    song.track.artist,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            if (showAlbum) ...[
-              const SizedBox(width: GazeSpacing.large),
-              Expanded(
-                flex: 3,
-                child: Text(
-                  song.album,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            const SizedBox(width: GazeSpacing.large),
-            Text(_formatDuration(song.track.duration)),
-            const SizedBox(width: GazeSpacing.small),
-            const Icon(Icons.play_arrow_rounded),
-          ],
-        ),
+        ],
       ),
-    );
-  }
-
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes;
-    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-}
-
-class _SongsMessage extends StatelessWidget {
-  const _SongsMessage({
-    required this.icon,
-    required this.title,
-    required this.message,
-    this.buttonLabel,
-    this.onPressed,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-  final String? buttonLabel;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(GazeSpacing.xLarge),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 36, color: GazeColors.textSecondary),
-            const SizedBox(height: GazeSpacing.small),
-            Text(title, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: GazeSpacing.small),
-            Text(message, textAlign: TextAlign.center),
-            if (buttonLabel != null && onPressed != null) ...[
-              const SizedBox(height: GazeSpacing.large),
-              FilledButton(onPressed: onPressed, child: Text(buttonLabel!)),
-            ],
-          ],
+    ),
+  );
+  Widget _body() {
+    if (!_browse && !_retrying)
+      return _message(
+        'Connect your Jellyfin library',
+        'Connect before browsing songs.',
+        action: widget.onConnect,
+        label: 'Connect Jellyfin',
+      );
+    if (_songs.isEmpty && (_refreshing || _retrying))
+      return const Center(child: CircularProgressIndicator());
+    if (_songs.isEmpty && !_online)
+      return _message(
+        'No saved songs yet',
+        'Connect to Jellyfin once to save your song library on this device.',
+      );
+    if (_songs.isEmpty && _error != null)
+      return _message('Songs could not be loaded', _error!, action: _retry);
+    if (_songs.isEmpty)
+      return _message(
+        'No songs found',
+        'Jellyfin returned no songs for this account.',
+      );
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView.separated(
+        controller: _scrollController,
+        padding: const EdgeInsets.symmetric(
+          horizontal: GazeSpacing.xLarge,
+          vertical: GazeSpacing.small,
+        ),
+        itemCount: _songs.length,
+        separatorBuilder: (_, _) =>
+            Divider(height: 1, color: Colors.white.withValues(alpha: .10)),
+        itemBuilder: (context, index) => SongRow(
+          key: ValueKey(_songs[index].track.id),
+          song: _songs[index],
+          connectionController: widget.connectionController,
+          showAlbum: constraints.maxWidth >= 760,
+          onPlay: !_canPlay
+              ? null
+              : (song) => _act(() {
+                  final songs = [..._songs];
+                  songs[index] = song;
+                  return widget.onPlaySongs(songs, index);
+                }),
+          onQueue: !_canPlay
+              ? null
+              : (song, next) => _act(() => widget.onQueueSong(song, next)),
         ),
       ),
     );

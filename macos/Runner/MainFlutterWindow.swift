@@ -9,6 +9,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    (NSApplication.shared.delegate as? AppDelegate)?.configurePartyLinks(flutterViewController)
 
     super.awakeFromNib()
   }

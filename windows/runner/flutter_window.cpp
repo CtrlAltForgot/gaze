@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <flutter/standard_method_codec.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -25,6 +26,16 @@ bool FlutterWindow::OnCreate() {
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
+  party_channel_ = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+      flutter_controller_->engine()->messenger(), "gaze/party_links",
+      &flutter::StandardMethodCodec::GetInstance());
+  party_channel_->SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() == "initialLink") {
+      if (pending_party_link_.empty()) result->Success();
+      else result->Success(flutter::EncodableValue(pending_party_link_));
+      pending_party_link_.clear();
+    } else result->NotImplemented();
+  });
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
@@ -40,6 +51,7 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  party_channel_.reset();
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -51,6 +63,17 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  if (message == WM_COPYDATA && party_channel_) {
+    const auto* packet = reinterpret_cast<const COPYDATASTRUCT*>(lparam);
+    if (packet && packet->dwData == 0x47415A45 && packet->cbData > 0 && packet->cbData <= 2048 && packet->lpData) {
+      std::string link(static_cast<const char*>(packet->lpData), packet->cbData);
+      if (link.rfind("gaze://party/", 0) == 0) {
+        party_channel_->InvokeMethod("openLink", std::make_unique<flutter::EncodableValue>(link));
+        ShowWindow(hwnd, SW_RESTORE); SetForegroundWindow(hwnd); return TRUE;
+      }
+    }
+    return FALSE;
+  }
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

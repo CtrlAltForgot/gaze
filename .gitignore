@@ -43,3 +43,17 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Optional pinned local Linux high-refresh engine; rebuildable binary.
+.local-engine/
+
+# Local server/runtime configuration and preview harnesses
+.env
+.env.*
+!.env.example
+**/secrets/
+/gaze-data/
+/dist/
+/tool/media_review.dart
+*.pem
+*.key

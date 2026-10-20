@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +6,40 @@ import 'package:gaze/playback/playback_controller.dart';
 import 'package:gaze/playback/playback_queue_controller.dart';
 
 void main() {
+  test(
+    'collection shuffle randomizes the first slot, explicit selection stays exact',
+    () async {
+      final playback = QueueTestPlaybackController();
+      final queue = PlaybackQueueController(
+        playbackController: playback,
+        random: Random(7),
+      );
+      addTearDown(queue.dispose);
+      addTearDown(playback.dispose);
+      final tracks = [
+        _source('One'),
+        _source('Two'),
+        _source('Three'),
+        _source('Two'),
+      ];
+      await queue.playCollection(tracks);
+      expect(playback.loadedTitles.last, 'One');
+      queue.setShuffle(true);
+      final starts = <String>{};
+      for (var i = 0; i < 15; i++) {
+        await queue.playCollection(tracks);
+        starts.add(playback.loadedTitles.last);
+        expect(
+          queue.state.items.map((s) => s.title),
+          unorderedEquals(['One', 'Two', 'Three', 'Two']),
+        );
+      }
+      expect(starts.length, greaterThan(1));
+      await queue.playAlbum(tracks, startIndex: 2);
+      expect(playback.loadedTitles.last, 'Three');
+    },
+  );
+
   test(
     'plays an album from the selected track and supports navigation',
     () async {

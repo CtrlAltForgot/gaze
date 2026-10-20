@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:media_kit/media_kit.dart';
 
@@ -6,6 +7,7 @@ import 'playback_controller.dart';
 
 class MediaKitPlaybackController implements PlaybackController {
   MediaKitPlaybackController({Player? player}) : _player = player ?? Player() {
+    _audioOutputReady = _configureAudioOutput();
     _subscriptions = [
       _player.stream.position.listen((position) {
         if (!_openingSource) {
@@ -56,11 +58,23 @@ class MediaKitPlaybackController implements PlaybackController {
   }
 
   final Player _player;
+  late final Future<void> _audioOutputReady;
   final StreamController<PlaybackSnapshot> _states =
       StreamController<PlaybackSnapshot>.broadcast();
   late final List<StreamSubscription<dynamic>> _subscriptions;
   PlaybackSnapshot _state = const PlaybackSnapshot();
   bool _openingSource = false;
+
+  Future<void> _configureAudioOutput() async {
+    final native = _player.platform;
+    if (!Platform.isLinux || native is! NativePlayer) return;
+    // The default output queue is longer than our complete fade. With a large
+    // queue, Pause/Seek discards the faded samples before they reach speakers.
+    // Keep decoder/network caching intact and shorten only local audio output.
+    await native.setProperty('audio-buffer', '0.02');
+    await native.setProperty('pulse-buffer', '20');
+    await native.setProperty('pipewire-buffer', '20');
+  }
 
   @override
   PlaybackSnapshot get state => _state;
@@ -196,6 +210,7 @@ class MediaKitPlaybackController implements PlaybackController {
 
   Future<void> _run(Future<void> Function() operation) async {
     try {
+      await _audioOutputReady;
       await operation();
     } catch (error) {
       _reportError(error.toString());
@@ -215,6 +230,7 @@ class MediaKitPlaybackController implements PlaybackController {
 
   @override
   Future<void> dispose() async {
+    await _audioOutputReady;
     for (final subscription in _subscriptions) {
       await subscription.cancel();
     }

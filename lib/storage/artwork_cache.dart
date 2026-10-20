@@ -31,3 +31,13 @@ class DisabledArtworkCache implements ArtworkCache {
   @override
   Future<void> write(ArtworkCacheKey key, Uint8List bytes) async {}
 }
+
+/// A retained library image survives working-cache eviction and metadata changes.
+abstract interface class RetainedArtworkCache implements ArtworkCache {
+  Future<Uint8List?> readLatest(
+    String server,
+    String itemId, {
+    int maxWidth = 600,
+  });
+  String? latestPath(String server, String itemId, {int maxWidth = 600});
+}

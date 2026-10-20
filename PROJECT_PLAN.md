@@ -10,6 +10,14 @@ The experience should make albums feel valuable, browsing feel effortless, and l
 
 ## Current position and next milestones
 
+October 18 desktop follow-up: Linux close-to-tray, native playback menu and
+explicit saved-position Quit are implemented. Playlist personalization supports
+name, description and cover images, with sidebar shortcuts and artwork-led
+playlist pages. Automated checks and rendered fixture review are complete; live
+X/reopen/quit behavior and visual acceptance remain pending user review. The
+separate sync-service change preserves local custom titles and is prepared but
+requires remote deployment approval.
+
 - **Complete:** repository and Flutter desktop foundation on Linux.
 - **Complete:** generated Linux, Windows, and macOS runners; Windows and macOS validation remains pending on their respective operating systems.
 - **Complete:** Linux playback foundation selection and local media controls using media-kit.
@@ -106,6 +114,8 @@ Do not skip directly to a complete Home page or full Jellyfin client. Each miles
 
 ## Later library maintenance — metadata and playlist repair
 
+**Account-backed playlist decision (October 2026):** gaze owns the playlist management experience. Jellyfin stores the canonical playlists under the signed-in user on the chosen server; local caches are not the source of truth. New playlists are private by default. A future gaze mobile client must use the same server/account and playlist contracts. No separate gaze identity or service is required for this slice; the repository boundary leaves room for a later companion service. Names, adds, removals, and order are saved through authenticated requests, and destructive actions confirm their server-wide effect without deleting music files. Reorder checks the current entry order before writing so stale device state does not silently overwrite it. Cross-device mobile execution remains untested until that client exists.
+
 **Goal:** help listeners repair imperfect owned libraries without requiring a destructive rebuild.
 
 - Surface missing artwork, unknown artists, suspicious album grouping, and incomplete tags.
@@ -190,3 +200,112 @@ without independently downloading or indexing the library.
 ## Later — separate mobile application
 
 Create a separate mobile application shell that consumes the stable domain, application, and Jellyfin packages. Give it a mobile-native information architecture rather than reusing desktop screens. Share behavior and data contracts; share UI only when a component is genuinely appropriate on both form factors.
+
+## gaze service and Connect (October 2026)
+
+A separate gaze service now owns imports, source connections, manual recording
+matches, and manual Spotify playlist sync. Jellyfin remains the media/playback adapter
+and account identity for this stage. The account API and durable jobs are shared
+across devices and run while the desktop is closed. The prior decision that no
+service was needed applied to ordinary playlist editing only; background imports
+and source mirroring now require this service. See `server/README.md` for the
+contract, runtime configuration, acceptance checks, and recovery behavior.
+
+Connect brings together the library account, Spotify sign-in or explicit reuse
+of Synopti's connected account, playlist selection, Synopti played-song sync,
+and a per-song import review list. Spotify controls active linked copies; gaze
+retains downloaded library files when source membership changes. All audio is
+selected at the best available source quality, tagged without re-encoding, and
+verified for identical audio packets before atomic publication. No desktop
+shortcut or media-session integration is part of this pass.
+
+Spotify updates are manual only. The service never polls Spotify on a timer;
+import and Sync now are the only playlist refresh triggers. Synopti played-song
+reporting and completion of already requested downloads remain active.
+
+### Missing artwork fallback — October 2026
+
+The separate gaze service fills missing covers after indexing, using stored source
+artwork before an exact album/artist search through MusicBrainz and the Cover Art
+Archive. A manual Connect action searches older library albums and retries missing
+covers. Existing covers and all audio files are preserved. Artwork failures do not
+block saved songs, and this does not enable periodic Spotify synchronization.
+Acceptance includes live image retrieval and unchanged audio file hashes, in
+addition to provider/queue tests and desktop checks. Manual visual approval remains
+required before committing the new Connect controls.
+
+### Startup responsiveness — October 2026
+
+Saved metadata is the first browse response during session restoration. Network
+validation runs in parallel and gates playback; cached browsing does not confer
+streaming access. Album-page streams emit saved data before refreshing stale
+snapshots. Account changes invalidate late responses and retained tab state.
+Artwork is requested by visible widgets instead of serially in metadata parsing,
+and visited tabs stay mounted without eagerly loading unseen destinations.
+Existing artwork-derived player colors continue to load independently of audio.
+The desktop launcher should use the optimized Linux release bundle for ordinary
+listening; debug builds remain the development and hot-reload path. No background
+Spotify synchronization or server deployment is part of this change.
+
+### Linux media keys — October 2026
+
+Phase 8 now includes a Linux-only MPRIS adapter in
+`lib/desktop/linux_media_session.dart`, composed at application startup and
+released before the playback controllers. It uses the already resolved Dart
+D-Bus dependency rather than reimplementing the bus protocol or adding native
+plugins. Background transport controls, public track metadata, capabilities,
+seek and volume updates share the existing playback/queue interfaces. Paused
+queue navigation is supported without starting audio. Other desktop platforms
+remain isolated future adapters. Acceptance includes real D-Bus protocol tests,
+Linux builds, and the physical-key/background check documented in README.
+
+### Short playback envelopes — October 2026
+
+A framework-independent playback decorator owns brief gain envelopes for play,
+pause, stop, source replacement and seek. It wraps the existing media-kit adapter
+at composition, so the UI, queue and MPRIS all use identical smoothing. Temporary
+gain is excluded from public/persisted volume. Source loads remain paused and
+subsequent Play performs the fade-in; this is not gapless or overlapping-track
+crossfade playback. Timing defaults and acceptance are recorded in README.
+
+Linux output buffering is set to 20 ms in the native media-kit adapter. An
+isolated audio capture showed that the default output queue truncates short
+fade-outs; both the player and PulseAudio/PipeWire output buffer hints must be
+shortened. This leaves network caching and system-wide audio settings unchanged.
+
+## Shuffle and repeat — October 2026
+
+The persistent player has a shuffle toggle and a repeat control cycling through
+off, queue, and one song. Active controls have an accent background and status dot;
+repeat-one also shows a 1. Tooltips and accessibility labels describe the current
+mode and next action. The controls work before choosing music, too.
+
+Shuffle reorders upcoming queue slots without interrupting the current song or
+changing history; switching it off restores the remaining original order. A new
+album started with shuffle enabled keeps the selected song first and shuffles all
+other slots. Duplicate songs remain distinct. Explicit Play next, append, remove,
+and reorder actions remain usable. Repeat-one applies to natural completion, so
+manual Next still skips. Repeat-queue wraps at the end; shuffled passes avoid
+replaying the same queue slot immediately.
+
+The queue controller owns these modes. SQLite schema 3 saves modes, queue order,
+and the ordering needed to turn shuffle off after restart; older snapshots migrate
+with both modes off. Linux MPRIS Shuffle and LoopStatus use the same state and
+commands. No dependency or audio-envelope changes are needed.
+
+Acceptance: queue completion and duplicate-slot tests, pause-safe mode changes,
+editing while shuffled, database migration/round-trip, MPRIS synchronization,
+widget controls at desktop widths, full client checks and Linux debug/release
+builds. Manual inspection of the installed controls remains a separate user check;
+Windows and macOS execution are untested.
+
+### October 20 desktop refinement acceptance
+
+Refine the existing client with icon-based playlist controls, retain the boxed
+playlist search, and standardize selection/double-click playback and context
+menus across library track rows. Add a capability-negotiated Linux window header
+with native move/resize and unchanged close-to-tray behavior. Preserve the current
+client in an isolated Git checkpoint before editing. Verify formatting, analysis,
+the complete client suite, Linux builds, and a live preview. Keep resulting visual
+changes uncommitted until the user reviews them; Windows/macOS custom frames are
+outside this pass.

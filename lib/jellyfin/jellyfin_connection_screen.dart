@@ -7,11 +7,13 @@ class JellyfinConnectionScreen extends StatefulWidget {
   const JellyfinConnectionScreen({
     required this.controller,
     required this.onClose,
+    this.embedded = false,
     super.key,
   });
 
   final JellyfinConnectionController controller;
   final VoidCallback onClose;
+  final bool embedded;
 
   @override
   State<JellyfinConnectionScreen> createState() =>
@@ -67,6 +69,7 @@ class _JellyfinConnectionScreenState extends State<JellyfinConnectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.embedded) return _panel();
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -76,47 +79,49 @@ class _JellyfinConnectionScreenState extends State<JellyfinConnectionScreen> {
         ),
         title: const Text('Connect Jellyfin'),
       ),
-      body: StreamBuilder<JellyfinConnectionState>(
-        stream: widget.controller.states,
-        initialData: widget.controller.state,
-        builder: (context, snapshot) {
-          final connection = snapshot.data ?? widget.controller.state;
-          return Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(GazeSpacing.large),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: GazeColors.surface,
-                    borderRadius: BorderRadius.circular(GazeRadii.card),
-                    border: Border.all(color: GazeColors.outline),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(GazeSpacing.xLarge),
-                    child: connection.isConnected
-                        ? _ConnectedContent(
-                            connection: connection,
-                            onDisconnect: widget.controller.disconnect,
-                          )
-                        : _ConnectionForm(
-                            connection: connection,
-                            serverController: _serverController,
-                            userNameController: _userNameController,
-                            passwordController: _passwordController,
-                            usesPlainHttp: _usesPlainHttp,
-                            onServerChanged: (_) => setState(() {}),
-                            onConnect: _connect,
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(GazeSpacing.large),
+          child: _panel(),
+        ),
       ),
     );
   }
+
+  Widget _panel() => StreamBuilder<JellyfinConnectionState>(
+    stream: widget.controller.states,
+    initialData: widget.controller.state,
+    builder: (context, snapshot) {
+      final connection = snapshot.data ?? widget.controller.state;
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: GazeColors.surface,
+            borderRadius: BorderRadius.circular(GazeRadii.card),
+            border: Border.all(color: GazeColors.outline),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(GazeSpacing.xLarge),
+            child: connection.isConnected
+                ? _ConnectedContent(
+                    connection: connection,
+                    onDisconnect: widget.controller.disconnect,
+                  )
+                : _ConnectionForm(
+                    connection: connection,
+                    serverController: _serverController,
+                    userNameController: _userNameController,
+                    passwordController: _passwordController,
+                    usesPlainHttp: _usesPlainHttp,
+                    onServerChanged: (_) => setState(() {}),
+                    onConnect: _connect,
+                  ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _ConnectionForm extends StatelessWidget {

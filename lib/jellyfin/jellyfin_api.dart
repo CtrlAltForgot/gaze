@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import '../library/playlist_summary.dart';
 import '../library/album_summary.dart';
 import '../library/artist_summary.dart';
 import '../library/library_search_results.dart';
@@ -145,6 +148,84 @@ abstract interface class JellyfinApi {
     required int limit,
   });
 
+  Future<Uint8List?> getArtwork({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String itemId,
+    required String? imageTag,
+  });
+
+  Future<PlaylistPage> getPlaylists({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required int startIndex,
+    required int limit,
+  });
+
+  Future<SongPage> getPlaylistTracks({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required int startIndex,
+    required int limit,
+  });
+
+  Future<PlaylistSummary> createPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String name,
+    List<String> itemIds = const [],
+  });
+  Future<bool> canEditPlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  });
+  Future<void> renamePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+  });
+  Future<PlaylistSummary> getPlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  });
+  Future<PlaylistSummary> updatePlaylistDetails({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String name,
+    required String description,
+    Uint8List? imageBytes,
+    String? imageMimeType,
+  });
+  Future<void> addPlaylistSongs({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required List<String> itemIds,
+  });
+  Future<void> removePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+  });
+  Future<void> movePlaylistEntry({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+    required String entryId,
+    required int newIndex,
+  });
+  Future<void> deletePlaylist({
+    required JellyfinServerAddress address,
+    required JellyfinSession session,
+    required String playlistId,
+  });
+
   Future<LibrarySearchResults> searchLibrary({
     required JellyfinServerAddress address,
     required JellyfinSession session,
@@ -190,4 +271,16 @@ class JellyfinConnectionException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Jellyfin saves metadata and images separately. The confirmed current details
+/// remain usable when one part fails; the editor can retain the unsaved draft.
+class JellyfinPlaylistUpdateException extends JellyfinConnectionException {
+  const JellyfinPlaylistUpdateException(
+    super.message, {
+    super.statusCode,
+    this.savedPlaylist,
+  });
+
+  final PlaylistSummary? savedPlaylist;
 }

@@ -13,8 +13,15 @@ class LibrarySearchResults {
 }
 
 class TrackSearchResult {
-  const TrackSearchResult({required this.track, this.artworkBytes});
+  const TrackSearchResult({
+    required this.track,
+    this.artworkBytes,
+    this.albumId,
+    this.imageTag,
+  });
 
   final TrackSummary track;
   final Uint8List? artworkBytes;
+  final String? albumId;
+  final String? imageTag;
 }

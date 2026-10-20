@@ -56,7 +56,7 @@ Whenever a task creates or changes anything visible in the gaze interface:
    - `flutter build linux --debug`
 2. Do not consider the UI task complete based only on automated tests.
 3. After the checks pass, attempt to launch gaze with `flutter run -d linux`.
-4. If the execution environment cannot display the graphical window, clearly state that limitation and give the user this exact normal-Konsole command: `cd /home/user/Projects/gaze && flutter run -d linux`.
+4. If the execution environment cannot display the graphical window, clearly state that limitation and give the user this exact normal-Konsole command: `cd gaze && flutter run -d linux`.
 5. Tell the user which refresh procedure applies:
    - For ordinary Dart and widget changes, press `r` in the active Flutter terminal to hot reload.
    - For dependency, plugin, runner, or native changes, stop the app with `Ctrl+C` and launch it again.
