@@ -11,7 +11,7 @@ const idPattern = /^[a-f0-9]{32}$/i;
 export class Parties {
   constructor({jellyfin, publicOrigin, guests = false, now = Date.now, fetchImpl = fetch}) {
     this.jellyfin = jellyfin; this.now = now; this.fetch = fetchImpl; this.guests = guests;
-    this.sessions = new Map(); this.attempts = new Map(); this.creating = new Set();
+    this.sessions = new Map(); this.attempts = new Map(); this.creating = new Set(); this.invites = new Map();
     if (publicOrigin) {
       const u = new URL(publicOrigin);
       if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || u.pathname !== '/') throw Error('GAZE_PUBLIC_ORIGIN must be an HTTPS origin.');
@@ -20,15 +20,15 @@ export class Parties {
   }
   prune() {
     for (const [id, s] of this.sessions) {
-      if (s.expiresAt <= this.now() || s.updatedAt < this.now() - 120000) this.end(id);
+      if (s.expiresAt <= this.now() || s.hostSeen < this.now() - 120000) this.end(id);
       else for (const [key, guest] of s.members) if (guest.seen < this.now() - 45000) { this.abortStreams(s, key); s.members.delete(key); }
     }
     for (const [key, value] of this.attempts) if (value.at < this.now() - 60000) this.attempts.delete(key);
   }
-  rateLimit(key) {
+  rateLimit(key, limit = 20) {
     this.prune();
     const value = this.attempts.get(key) || {at: this.now(), count: 0};
-    if (++value.count > 20) fail('Too many join attempts. Try again in a minute.', 429);
+    if (++value.count > limit) fail('Too many session requests. Try again in a minute.', 429);
     if (this.attempts.size < 10000 || this.attempts.has(key)) this.attempts.set(key, value);
     else fail('The service is busy. Try again shortly.', 429);
   }
@@ -36,7 +36,7 @@ export class Parties {
     if (!Array.isArray(ids) || !ids.length || ids.length > 1000 || ids.some(id => typeof id !== 'string' || !idPattern.test(id))) fail('Choose a queue of up to 1,000 library songs.');
     const cached = new Map(old.map(t => [t.id, t]));
     const missing = [...new Set(ids.filter(id => !cached.has(id)))];
-    const library = missing.length > 8 && this.jellyfin.songs ? new Map((await this.jellyfin.songs(owner)).map(item => [item.Id, item])) : null;
+    const library = missing.length > 8 && (this.jellyfin.partyItems || this.jellyfin.songs) ? new Map((await (this.jellyfin.partyItems ? this.jellyfin.partyItems(owner, missing) : this.jellyfin.songs(owner))).map(item => [item.Id, item])) : null;
     const result = [];
     // Serial bounded lookups; repeated queue slots retain their order.
     for (const id of ids) {
@@ -59,11 +59,11 @@ export class Parties {
     let queue;
     try { queue = await this.tracks(owner, data.queue); }
     finally { this.creating.delete(owner.id); }
-    const id = randomBytes(16).toString('hex'), invite = secret(), host = secret();
-    const s = {id, owner, invite: hash(invite), host: hash(host), members: new Map(), streams: new Set(), queue, revision: 1, updatedAt: this.now(), expiresAt: this.now() + 12 * 3600000};
+    const id = randomBytes(16).toString('hex'), invite = randomBytes(9).toString('base64url'), host = secret();
+    const s = {id, owner, invite: hash(invite), host: hash(host), members: new Map(), streams: new Set(), queue: this.withSlots(queue), revision: 1, commandVersion: 0, hostSeen: this.now(), updatedAt: this.now(), expiresAt: this.now() + 12 * 3600000};
     this.setPlayback(s, data);
-    this.sessions.set(id, s);
-    return {id, token: host, inviteUrl: `${this.origin}/party/${id}#${invite}`, ...this.snapshot(s)};
+    this.sessions.set(id, s); this.invites.set(hash(invite).toString('hex'), id);
+    return {id, token: host, inviteUrl: `${this.origin}/party/${invite}`, ...this.snapshot(s)};
   }
   session(id) {
     this.prune();
@@ -95,26 +95,90 @@ export class Parties {
   async update(id, token, data) {
     const s = this.authorize(id, token, true);
     if (s.updating) fail('A session update is already running.', 409);
+    s.hostSeen = this.now();
+    if ((data.commandVersion ?? 0) !== s.commandVersion) return this.snapshot(s);
     s.updating = true;
+    const version = s.commandVersion;
     try {
     if (data.queue) {
       const queue = await this.tracks(s.owner, data.queue, s.queue);
+      if (version !== s.commandVersion) return this.snapshot(s);
       // Validate as a unit before replacing the current queue.
       const next = {...s, queue}; this.setPlayback(next, data);
       for (const stream of s.streams) if (!queue.some(t => t.id === stream.itemId)) stream.abort.abort();
-      Object.assign(s, {queue, index: next.index, playing: next.playing, positionMs: next.positionMs, updatedAt: next.updatedAt}); s.revision++;
+      Object.assign(s, {queue: this.withSlots(queue, s.queue), index: next.index, playing: next.playing, positionMs: next.positionMs, updatedAt: next.updatedAt}); s.revision++;
     } else this.setPlayback(s, data);
     return this.snapshot(s, false);
     } finally { s.updating = false; }
   }
   snapshot(s, includeQueue = true) {
     const now = this.now();
-    return {id: s.id, hostName: s.owner.name, serverTime: now, expiresAt: s.expiresAt, revision: s.revision, connected: now - s.updatedAt < 10000, updatedAt: s.updatedAt, index: s.index, playing: s.playing && now - s.updatedAt < 10000, positionMs: s.positionMs, ...(includeQueue ? {queue: s.queue.map(({artworkId, ...track}) => ({...track, hasArtwork: !!artworkId}))} : {}), listeners: [...s.members.values()].map(m => m.name)};
+    return {id: s.id, hostName: s.owner.name, serverTime: now, expiresAt: s.expiresAt, revision: s.revision, commandVersion: s.commandVersion, connected: now - s.hostSeen < 10000, updatedAt: s.updatedAt, index: s.index, playing: s.playing && now - s.hostSeen < 10000, positionMs: s.positionMs, ...(includeQueue ? {queue: s.queue.map(({artworkId, ...track}) => ({...track, hasArtwork: !!artworkId}))} : {}), listeners: [...s.members.values()].map(m => m.name)};
+  }
+  withSlots(queue, old = []) {
+    const slots = new Map();
+    for (const item of old) { if (!slots.has(item.id)) slots.set(item.id, []); slots.get(item.id).push(item.slot); }
+    return queue.map(item => ({...item, slot: slots.get(item.id)?.shift() || randomBytes(9).toString('base64url')}));
+  }
+  joinInvite(code, name) {
+    this.prune();
+    const id = typeof code === 'string' && /^[\w-]{12}$/.test(code) ? this.invites.get(hash(code).toString('hex')) : null;
+    if (!id) fail('This Party Session has ended or the invitation is invalid.', 410);
+    return this.join(id, code, name);
+  }
+  async search(id, token, query) {
+    const s = this.authorize(id, token);
+    const q = String(query || '').trim().toLowerCase().slice(0, 100);
+    if (q.length < 2) return {songs: []};
+    const items = await this.jellyfin.songs(s.owner);
+    this.authorize(id, token);
+    return {songs: items.filter(item => item.Type === 'Audio' && (String(item.Name) + ' ' + (item.Artists || []).join(' ')).toLowerCase().includes(q)).slice(0, 40).map(item => ({id:item.Id, title:item.Name || 'Untitled', artist:(item.Artists || []).join('; '), durationMs:Math.round((item.RunTimeTicks || 0)/10000)}))};
+  }
+  async command(id, token, data) {
+    const live = this.authorize(id, token);
+    // Bound all participant actions separately from joining.
+    this.rateLimit('command:' + hash(token).toString('hex'), 120);
+    let added;
+    if (data.action === 'add') added = this.withSlots(await this.tracks(live.owner, [data.itemId]));
+    this.authorize(id, token);
+    const s = {...live, queue: [...live.queue]};
+    const now = this.now();
+    if (s.playing) s.positionMs += Math.max(0, now - s.updatedAt);
+    const findSlot = () => { const i = s.queue.findIndex(t => t.slot === data.slot); if (i < 0) fail('The queue changed. Try again.', 409); return i; };
+    switch (data.action) {
+      case 'add':
+        if (s.queue.length >= 1000) fail('The shared queue is full.');
+        s.queue.push(...added); s.revision++; break;
+      case 'remove': {
+        const i = findSlot();
+        if (i === s.index) fail('Skip the current song before removing it.');
+        s.queue.splice(i, 1); if (i < s.index) s.index--; s.revision++; break;
+      }
+      case 'move': {
+        const from = findSlot(), to = s.queue.findIndex(t => t.slot === data.before);
+        if (from <= s.index || to <= s.index) fail('Only upcoming songs can be reordered.');
+        if (from !== to) { const [item] = s.queue.splice(from,1); s.queue.splice(s.queue.findIndex(t => t.slot === data.before) + (data.after === true ? 1 : 0),0,item); s.revision++; } break;
+      }
+      case 'clear': s.queue.splice(s.index + 1); s.revision++; break;
+      case 'next': if (s.index + 1 < s.queue.length) {s.index++; s.positionMs = 0; s.playing = true;} break;
+      case 'previous': s.index = Math.max(0,s.index - 1); s.positionMs = 0; s.playing = true; break;
+      case 'playAt': s.index = findSlot(); s.positionMs = 0; s.playing = true; break;
+      case 'play': s.playing = true; break;
+      case 'pause': s.playing = false; break;
+      case 'seek':
+        if (!Number.isFinite(data.positionMs) || data.positionMs < 0 || data.positionMs > 86400000) fail('Invalid playback position.');
+        s.positionMs = Math.min(data.positionMs, s.queue[s.index].durationMs || 86400000); break;
+      default: fail('Unknown session action.');
+    }
+    s.updatedAt = now; s.commandVersion++;
+    Object.assign(live, s);
+    for (const stream of s.streams) if (!s.queue.some(t => t.id === stream.itemId)) stream.abort.abort();
+    return this.snapshot(s);
   }
   abortStreams(s, memberKey = null) {
     for (const stream of s.streams) if (memberKey === null || stream.memberKey === memberKey) stream.abort.abort();
   }
-  end(id) { const s = this.sessions.get(id); if (s) this.abortStreams(s); this.sessions.delete(id); }
+  end(id) { const s = this.sessions.get(id); if (s) this.abortStreams(s); this.sessions.delete(id); for (const [key, value] of this.invites) if (value === id) this.invites.delete(key); }
   leave(id, token) {
     const s = this.authorize(id, token);
     if (matches(token, s.host)) { this.end(id); return; }

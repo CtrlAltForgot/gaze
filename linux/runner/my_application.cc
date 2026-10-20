@@ -242,6 +242,12 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_titlebar(window, gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0));
   gtk_window_set_decorated(window, FALSE);
   gtk_window_set_title(window, "gaze");
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path) {
+    g_autofree gchar* exe_dir = g_path_get_dirname(exe_path);
+    g_autofree gchar* icon_path = g_build_filename(exe_dir, "data", "flutter_assets", "assets", "branding", "gaze.png", nullptr);
+    gtk_window_set_icon_from_file(window, icon_path, nullptr);
+  }
   g_signal_connect(window, "window-state-event", G_CALLBACK(window_state_cb), self);
 
   gtk_window_set_default_size(window, 1280, 720);

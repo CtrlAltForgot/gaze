@@ -1,3 +1,6 @@
+@TestOn('linux')
+library;
+
 import 'dart:io';
 
 import 'package:dbus/dbus.dart';

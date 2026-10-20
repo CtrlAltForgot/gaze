@@ -15,7 +15,7 @@ function setup(extra = {}) {
 
 test('invitations exchange for separate scoped credentials; private metadata is absent',async()=>{
   const {parties,requested}=setup(); const host=await parties.create(owner,input);
-  const invite=new URL(host.inviteUrl).hash.slice(1), guest=parties.join(host.id,invite,'Friend');
+  const invite=new URL(host.inviteUrl).pathname.split('/').pop(), guest=parties.join(host.id,invite,'Friend');
   assert.notEqual(host.token,guest.token);assert.deepEqual(requested,[a,b]);
   assert.equal(guest.queue.length,3);assert.equal(guest.queue[0].id,guest.queue[2].id);
   assert(!JSON.stringify(guest).includes(owner.token));assert(!JSON.stringify(guest).includes('library.invalid'));assert(!JSON.stringify(guest).includes('artworkId'));
@@ -26,7 +26,7 @@ test('invitations exchange for separate scoped credentials; private metadata is 
 });
 
 test('expiry, stale hosts, capacity, leave and host end revoke access',async()=>{
-  const {parties,advance}=setup();const host=await parties.create(owner,input), invite=new URL(host.inviteUrl).hash.slice(1);
+  const {parties,advance}=setup();const host=await parties.create(owner,input), invite=new URL(host.inviteUrl).pathname.split('/').pop();
   const guest=parties.join(host.id,invite,'Friend');
   for(let i=0;i<11;i++)parties.join(host.id,invite,`Friend ${i}`);
   assert.throws(()=>parties.join(host.id,invite,'Overflow'),/full/);
@@ -56,7 +56,7 @@ test('HTTP landing, participant access, proxy ranges and host-only control',asyn
   const request=(path,token,body,headers={})=>fetch(origin+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:`Bearer ${token}`} : {}),...headers},...(body?{body:JSON.stringify(body)}:{})});
   const landing=await request('/');assert.equal(landing.status,200);assert.match(await landing.text(),/Open|Get gaze/);assert.match(landing.headers.get('content-security-policy'),/frame-ancestors 'none'/);
   const created=await request('/v1/parties',owner.token,input);assert.equal(created.status,201);const host=await created.json();
-  const base=`/v1/parties/${host.id}`, invite=new URL(host.inviteUrl).hash.slice(1);
+  const base=`/v1/parties/${host.id}`, invite=new URL(host.inviteUrl).pathname.split('/').pop();
   const guest=await (await request(base+'/join',invite,{name:'Listener'})).json();
   assert.equal((await request(base+'/state',guest.token,{index:0,playing:false,positionMs:0})).status,403);
   const audio=await request(base+'/audio/'+a,guest.token,null,{Range:'bytes=10-12'});assert.equal(audio.status,206);assert.equal(await audio.text(),'abc');
@@ -73,4 +73,37 @@ test('host end aborts active audio transfers and join attempts are bounded',asyn
   const {parties}=setup();const host=await parties.create(owner,input), s=parties.session(host.id), abort=new AbortController();
   s.streams.add({abort,memberKey:'fake'});parties.leave(host.id,host.token);assert.equal(abort.signal.aborted,true);
   for(let i=0;i<20;i++)parties.rateLimit('test');assert.throws(()=>parties.rateLimit('test'),/Too many/);
+});
+
+test('short invites, shared edits, skips and stale host heartbeats keep one authoritative queue', async()=>{
+ const {parties,advance}=setup();const host=await parties.create(owner,input);
+ const code=new URL(host.inviteUrl).pathname.split('/').pop();assert.match(code,/^[\w-]{12}$/);assert.equal(new URL(host.inviteUrl).hash,'');
+ const guest=parties.joinInvite(code,'Friend');
+ assert.notEqual(guest.queue[0].slot,guest.queue[2].slot);
+ let state=await parties.command(host.id,guest.token,{action:'next'});assert.equal(state.index,1);
+ // A heartbeat sent before the guest's click must not undo that click.
+ state=await parties.update(host.id,host.token,{...input,commandVersion:0});assert.equal(state.index,1);assert.equal(state.commandVersion,1);
+ state=await parties.update(host.id,host.token,{index:1,playing:true,positionMs:700,commandVersion:1});assert.equal(state.positionMs,700);
+ state=await parties.command(host.id,guest.token,{action:'previous'});assert.equal(state.index,0);
+ state=await parties.command(host.id,guest.token,{action:'add',itemId:b});assert.equal(state.queue.length,4);
+ const duplicate=state.queue[2].slot;
+ state=await parties.command(host.id,guest.token,{action:'remove',slot:duplicate});assert.equal(state.queue.length,3);assert.equal(state.queue[0].id,a);
+ await assert.rejects(parties.command(host.id,guest.token,{action:'remove',slot:duplicate}),/queue changed/);
+ state=await parties.command(host.id,guest.token,{action:'move',slot:state.queue[1].slot,before:state.queue[2].slot,after:true});assert.equal(state.queue.length,3);
+ state=await parties.command(host.id,guest.token,{action:'pause'});assert.equal(state.playing,false);
+ state=await parties.command(host.id,guest.token,{action:'seek',positionMs:12000});assert.equal(state.positionMs,12000);
+ const before=parties.snapshot(parties.session(host.id));
+ await assert.rejects(parties.command(host.id,guest.token,{action:'seek',positionMs:-1}),/Invalid/);
+ assert.equal(parties.snapshot(parties.session(host.id)).positionMs,before.positionMs);
+ advance(11000);await parties.command(host.id,guest.token,{action:'play'});assert.equal(parties.snapshot(parties.session(host.id)).connected,false);
+ parties.leave(host.id,host.token);assert.throws(()=>parties.joinInvite(code,'Late'),/ended/);
+});
+
+test('session search returns audio metadata and validates added songs against the host library', async()=>{
+ const {parties,jellyfin}=setup();jellyfin.songs=async()=>[{Id:a,Type:'Audio',Name:'Test Song',Artists:['Artist'],RunTimeTicks:10000},{Id:b,Type:'Movie',Name:'Test Movie'}];
+ const host=await parties.create(owner,input), guest=parties.joinInvite(new URL(host.inviteUrl).pathname.split('/').pop(),'Friend');
+ const results=await parties.search(host.id,guest.token,'test');assert.equal(results.songs.length,1);assert.equal(results.songs[0].id,a);
+ assert(!JSON.stringify(results).includes(owner.token));
+ await assert.rejects(parties.command(host.id,guest.token,{action:'add',itemId:'c'.repeat(32)}),/unavailable/);
+ parties.leave(host.id,guest.token);await assert.rejects(parties.search(host.id,guest.token,'test'),/invalid/);
 });

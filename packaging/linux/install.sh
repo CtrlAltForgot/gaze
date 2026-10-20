@@ -19,8 +19,12 @@ import sys
 from pathlib import Path
 exe=sys.argv[1]
 quoted='"'+exe.replace('\\','\\\\').replace('"','\\"').replace('`','\\`').replace('$','\\$').replace('%','%%')+'"'
-Path(sys.argv[2]).write_text('[Desktop Entry]\nType=Application\nName=gaze\nComment=Your music, brought forward\nExec='+quoted+' %u\nIcon=audio-player\nTerminal=false\nCategories=AudioVideo;Audio;Player;\nMimeType=x-scheme-handler/gaze;\nStartupWMClass=com.example.gaze\n')
+Path(sys.argv[2]).write_text('[Desktop Entry]\nType=Application\nName=gaze\nComment=Your music, brought forward\nExec='+quoted+' %u\nIcon=com.example.gaze\nTerminal=false\nCategories=AudioVideo;Audio;Player;\nMimeType=x-scheme-handler/gaze;\nStartupWMClass=com.example.gaze\n')
 PY
+icon_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/512x512/apps"
+mkdir -p "$icon_dir"
+cp "$install_dir/bundle/data/flutter_assets/assets/branding/gaze.png" "$icon_dir/com.example.gaze.png"
+if command -v gtk-update-icon-cache >/dev/null; then gtk-update-icon-cache -f -t "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor" >/dev/null 2>&1 || true; fi
 if command -v update-desktop-database >/dev/null; then update-desktop-database "$applications"; fi
 xdg-mime default com.example.gaze.desktop x-scheme-handler/gaze
 printf '%s\n' 'gaze is installed. Open it from your applications menu, or open a Party Session invite.'

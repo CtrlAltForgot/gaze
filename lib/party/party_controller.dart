@@ -12,6 +12,7 @@ class PartyController extends ChangeNotifier {
     required this.playback,
     required this.queue,
   }) {
+    queue.partyCommand = _queueCommand;
     _accountSubscription = connect.connection.states.listen((_) {
       if (hosting && connect.connection.accountKey != _hostAccount)
         unawaited(leave());
@@ -32,7 +33,11 @@ class PartyController extends ChangeNotifier {
   bool get active => _id != null;
   bool get following => active && !hosting;
   bool _disposed = false, _polling = false;
-  int _generation = 0, _revision = -1, _guestIndex = -1;
+  int _generation = 0,
+      _revision = -1,
+      _guestIndex = -1,
+      _hostCommandVersion = 0;
+  bool _commanding = false;
   String? _loadedTrack;
   List<String> _lastQueue = [];
   PlaybackQueueState? _savedQueue;
@@ -61,6 +66,7 @@ class PartyController extends ChangeNotifier {
       );
     return {
       if (includeQueue) 'queue': state.items.map((s) => s.itemId!).toList(),
+      'commandVersion': _hostCommandVersion,
       'index': state.currentIndex,
       'playing':
           current.status == PlaybackStatus.playing &&
@@ -108,6 +114,9 @@ class PartyController extends ChangeNotifier {
       inviteUrl = data['inviteUrl'];
       snapshot = data;
       hosting = true;
+      _loadedTrack = queue.state.items[queue.state.currentIndex].itemId;
+      _guestIndex = queue.state.currentIndex;
+      _revision = data['revision'];
       _hostAccount = account;
       _lastQueue = queue.state.items.map((s) => s.itemId!).toList();
       _beginPolling();
@@ -129,14 +138,16 @@ class PartyController extends ChangeNotifier {
       final data = await api.request(
         invite.server,
         invite.secret,
-        '/v1/parties/${invite.id}/join',
+        invite.isShort
+            ? '/v1/party-invites/${invite.id}'
+            : '/v1/parties/${invite.id}/join',
         body: {'name': name.trim().isEmpty ? 'Listener' : name.trim()},
       );
       if (_disposed || generation != _generation) {
         await api.request(
           invite.server,
           data['token'],
-          '/v1/parties/${invite.id}/leave',
+          '/v1/parties/${data['id']}/leave',
           body: {},
         );
         return;
@@ -145,7 +156,7 @@ class PartyController extends ChangeNotifier {
       _savedPlayback = playback.state;
       await playback.pause();
       _server = invite.server;
-      _id = invite.id;
+      _id = data['id'];
       _token = data['token'];
       hosting = false;
       snapshot = data;
@@ -175,7 +186,7 @@ class PartyController extends ChangeNotifier {
   }
 
   Future<void> poll() async {
-    if (_disposed || !active || _polling) return;
+    if (_disposed || !active || _polling || _commanding) return;
     _polling = true;
     final generation = _generation;
     final watch = Stopwatch()..start();
@@ -196,7 +207,17 @@ class PartyController extends ChangeNotifier {
       error = null;
       _lastSuccess = DateTime.now().millisecondsSinceEpoch;
       if (hosting) {
-        _lastQueue = ids;
+        if ((data['commandVersion'] as int? ?? 0) > _hostCommandVersion) {
+          await _synchronize(
+            snapshot!,
+            watch.elapsedMilliseconds ~/ 2,
+            generation,
+          );
+          _hostCommandVersion = data['commandVersion'];
+          _lastQueue = queue.state.items.map((s) => s.itemId!).toList();
+        } else {
+          _lastQueue = ids;
+        }
       } else {
         await _synchronize(
           snapshot!,
@@ -282,6 +303,7 @@ class PartyController extends ChangeNotifier {
       queue.updatePartyQueue(
         tracks.map((t) => _source(t, artwork: _artwork[t['id']])).toList(),
         index,
+        preserveModes: hosting,
       );
       _revision = data['revision'];
       _guestIndex = index;
@@ -301,16 +323,87 @@ class PartyController extends ChangeNotifier {
     Map<String, dynamic> track, {
     Uint8List? artwork,
     Duration position = Duration.zero,
-  }) => RemotePlaybackSource(
-    uri: _server!.replace(path: '/v1/parties/$_id/audio/${track['id']}'),
-    headers: {'Authorization': 'Bearer $_token'},
-    title: track['title'],
-    artist: track['artist'],
-    artworkBytes: artwork,
-    startPosition: position,
-    // Session audio is not a library item in the guest's account. Do not report
-    // it to their Jellyfin or persist credentials in their saved queue.
-  );
+  }) {
+    if (hosting) {
+      final direct = connect.connection.createDirectPlaySource(track['id']);
+      final existing = queue.state.items
+          .where((s) => s.itemId == track['id'])
+          .firstOrNull;
+      return RemotePlaybackSource(
+        uri: direct.uri,
+        headers: direct.headers,
+        title: track['title'],
+        artist: track['artist'],
+        itemId: track['id'],
+        artworkBytes: artwork ?? existing?.artworkBytes,
+        artworkId: existing?.artworkId,
+        artworkTag: existing?.artworkTag,
+        startPosition: position,
+      );
+    }
+    return RemotePlaybackSource(
+      uri: _server!.replace(path: '/v1/parties/$_id/audio/${track['id']}'),
+      headers: {'Authorization': 'Bearer $_token'},
+      title: track['title'],
+      artist: track['artist'],
+      artworkBytes: artwork,
+      startPosition: position,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> search(String query) async {
+    if (!active) return [];
+    final result = await api.request(
+      _server!,
+      _token!,
+      '/v1/parties/$_id/search?q=${Uri.encodeQueryComponent(query)}',
+    );
+    return (result['songs'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> _queueCommand(String action, Map<String, dynamic> data) async {
+    final tracks = snapshot?['queue'] as List? ?? [];
+    final index = data['index'] as int?;
+    if (index != null && (index < 0 || index >= tracks.length)) return;
+    final to = data['to'] as int?;
+    if (to != null && (to < 0 || to >= tracks.length)) return;
+    await command(action, {
+      if (index != null) 'slot': tracks[index]['slot'],
+      if (to != null) 'before': tracks[to]['slot'],
+      if (to != null && index != null) 'after': to > index,
+    });
+  }
+
+  Future<void> command(String action, Map<String, dynamic> data) async {
+    if (!active || _commanding) return;
+    _commanding = true;
+    final generation = _generation;
+    try {
+      while (_polling && generation == _generation) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }
+      if (generation != _generation) return;
+      final response = await api.request(
+        _server!,
+        _token!,
+        '/v1/parties/$_id/command',
+        body: {'action': action, ...data},
+      );
+      if (generation != _generation) return;
+      snapshot = {...?snapshot, ...response};
+      await _synchronize(snapshot!, 0, generation);
+      if (hosting) {
+        _hostCommandVersion = response['commandVersion'];
+        _lastQueue = queue.state.items.map((s) => s.itemId!).toList();
+      }
+      error = null;
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      _commanding = false;
+      _notify();
+    }
+  }
 
   Future<void> leave({bool notifyServer = true}) async {
     final server = _server, token = _token, id = _id, wasGuest = following;
@@ -325,6 +418,7 @@ class PartyController extends ChangeNotifier {
     _loadedTrack = null;
     _guestIndex = -1;
     _revision = -1;
+    _hostCommandVersion = 0;
     _artwork.clear();
     // Let an already-started engine load finish before restoring local music.
     // Its generation check prevents it from playing or seeking afterward.
@@ -368,6 +462,7 @@ class PartyController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    queue.partyCommand = null;
     _timer?.cancel();
     unawaited(_accountSubscription?.cancel());
     api.close();

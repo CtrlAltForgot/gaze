@@ -12,9 +12,10 @@ wrong roles, reconnects, queue changes, HTTP ranges, and cold/warm app links.
 The gaze service is the authority for session membership and playback snapshots.
 Hosts authenticate with their existing Jellyfin account to create a session.
 They then use a distinct short-lived host capability; guest credentials can
-never call the account/import API. Invitations carry a random secret in the URL
-fragment (excluded from HTTP requests and referrers). Joining exchanges it for
-an individual participant token. No Jellyfin token, stream URL, file path, or
+never call the account/import API. Invitations use a random 12-character URL-safe code (72 bits) in /party/<code>.
+Only its hash is retained by the service. Joining exchanges it for an individual
+participant token. The landing page sends no referrers, and has no third-party
+resources. Codes expire with the session; older fragment invites remain parsable. No Jellyfin token, stream URL, file path, or
 Spotify credential is returned to guests. End, expiry, and host disappearance
 revoke access. Sessions are memory-only and expire on service restart.
 
@@ -23,13 +24,18 @@ heartbeats publish the track, position, play state, and actual queue order.
 Guests estimate the server clock from request round-trip time, apply the same
 playback state, and correct significant drift through the shared controller.
 This is synchronized listening over the network, not sample-accurate audio.
-The host owns transport; each guest retains their own volume and leave control.
+Guests can search the host’s available music, add songs, remove upcoming songs,
+reorder, skip, go back, pause/play, and seek. Each guest retains their own volume.
+Shared commands have a monotonic version; stale host heartbeats cannot undo
+commands. Queue entries have distinct slot IDs so duplicate songs can be edited
+without removing the wrong occurrence. The host applies new server commands
+through the shared playback controller and acknowledges their version.
 
 The service validates every new queue item against the host's library and proxies
 only session-listed audio/artwork. Streaming supports ranges and propagates
 cancellation, without buffering songs in memory. Invite links are bearer access:
 share them only with intended listeners. Limit each session to 12 participants,
-1,000 queued items, and 12 hours. The host must remain connected; guests pause
+1,000 queued items, and 12 hours. The host must remain connected; guest edits do not extend its heartbeat. Guests pause
 on stale heartbeats. Guest audio requires explicit GAZE_PARTY_GUESTS=true.
 
 ## Deployment

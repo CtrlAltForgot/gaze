@@ -1,5 +1,6 @@
 import '../party/party_controller.dart';
 import 'party_dialog.dart';
+import 'party_song_search.dart';
 import 'artist_links.dart';
 import '../design/gaze_motion.dart';
 import 'marquee_text.dart';
@@ -147,6 +148,21 @@ class QueuePanel extends StatelessWidget {
                       )
                     : const SizedBox.shrink(),
               ),
+            if (partyController != null)
+              ListenableBuilder(
+                listenable: partyController!,
+                builder: (context, _) => partyController!.active
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              showPartySongSearch(context, partyController!),
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: const Text('Add songs'),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             if (current == null)
               const Expanded(
                 child: Center(
@@ -231,7 +247,7 @@ class QueuePanel extends StatelessWidget {
                               source.artist,
                               hoverOnly: true,
                             ),
-                            onTap: !online
+                            onTap: !online && !controller.followingParty
                                 ? null
                                 : () => _play(context, start + index),
                             trailing: SizedBox(

@@ -143,6 +143,7 @@ class _GazeAppState extends State<GazeApp> {
   late final PlaybackController _playback = PartyPlaybackController(
     widget.playbackController,
     () => _party?.following == true,
+    command: (action, data) async => _party?.command(action, data),
   );
   bool _inviteDialogOpen = false;
   Future<void> _openInvite(String link) async {

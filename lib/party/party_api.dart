@@ -15,6 +15,7 @@ class PartyInvite {
   final Uri server;
   final String id;
   final String secret;
+  bool get isShort => RegExp(r'^[\w-]{12}$').hasMatch(id);
   static PartyInvite parse(String value) {
     final uri = Uri.tryParse(value.trim());
     if (uri == null)
@@ -44,8 +45,9 @@ class PartyInvite {
         (server.path.isNotEmpty && server.path != '/') ||
         server.hasQuery ||
         server.hasFragment ||
-        !RegExp(r'^[a-f0-9]{32}$').hasMatch(id) ||
-        !RegExp(r'^[\w-]{43}$').hasMatch(uri.fragment)) {
+        !(RegExp(r'^[\w-]{12}$').hasMatch(id) && !uri.hasFragment ||
+            RegExp(r'^[a-f0-9]{32}$').hasMatch(id) &&
+                RegExp(r'^[\w-]{43}$').hasMatch(uri.fragment))) {
       throw const PartyException('This invitation is incomplete or invalid.');
     }
     return PartyInvite(server, id, uri.fragment);

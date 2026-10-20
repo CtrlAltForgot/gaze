@@ -3,8 +3,9 @@ import '../playback/playback_controller.dart';
 /// Shared UI, keyboard and MPRIS commands obey the same host/follower boundary.
 /// Party synchronization uses the wrapped controller directly.
 class PartyPlaybackController implements PlaybackController {
-  PartyPlaybackController(this.inner, this.isFollowing);
+  PartyPlaybackController(this.inner, this.isFollowing, {this.command});
   final PlaybackController inner;
+  final Future<void> Function(String, Map<String, dynamic>)? command;
   final bool Function() isFollowing;
   @override
   PlaybackSnapshot get state => inner.state;
@@ -27,12 +28,20 @@ class PartyPlaybackController implements PlaybackController {
 
   @override
   Future<void> play() async {
-    if (!isFollowing()) await inner.play();
+    if (isFollowing()) {
+      await command?.call('play', {});
+    } else {
+      await inner.play();
+    }
   }
 
   @override
   Future<void> pause() async {
-    if (!isFollowing()) await inner.pause();
+    if (isFollowing()) {
+      await command?.call('pause', {});
+    } else {
+      await inner.pause();
+    }
   }
 
   @override
@@ -42,7 +51,11 @@ class PartyPlaybackController implements PlaybackController {
 
   @override
   Future<void> seek(Duration position) async {
-    if (!isFollowing()) await inner.seek(position);
+    if (isFollowing()) {
+      await command?.call('seek', {'positionMs': position.inMilliseconds});
+    } else {
+      await inner.seek(position);
+    }
   }
 
   @override

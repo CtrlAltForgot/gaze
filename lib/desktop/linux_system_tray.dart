@@ -330,7 +330,7 @@ class _TrayItem extends _TrayObject {
     'Title': const DBusString('gaze'),
     'Status': const DBusString('Active'),
     'WindowId': const DBusUint32(0),
-    'IconName': const DBusString(''),
+    'IconName': const DBusString('com.example.gaze'),
     'IconPixmap': _pixmaps,
     'OverlayIconName': const DBusString(''),
     'OverlayIconPixmap': DBusArray(DBusSignature('(iiay)'), []),

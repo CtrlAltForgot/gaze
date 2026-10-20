@@ -3,6 +3,15 @@ export class Jellyfin{
  constructor(origin,{fetchImpl=fetch,musicPath='/data/music/gaze Imports'}={}){this.origin=new URL(origin);if(!['http:','https:'].includes(this.origin.protocol)||this.origin.username||this.origin.password)throw Error('Invalid Jellyfin origin.');this.fetch=fetchImpl;this.musicPath=musicPath;this.cache=new Map();this.lastMusicRefresh=0;}
  async request(token,route,{method='GET',query={},body}={}){const u=new URL(this.origin);u.pathname=u.pathname.replace(/\/$/,'')+route;u.search=new URLSearchParams(query).toString();let response;try{response=await this.fetch(u,{method,headers:{'X-Emby-Token':token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000),redirect:'error'});}catch{throw Error('Jellyfin is unavailable. Imports will wait for the server.');}if(!response.ok){const e=Error(response.status===401||response.status===403?'Sign in to Jellyfin again to resume imports.':'Jellyfin could not save this change.');e.status=response.status;throw e;}return response.status===204?null:await response.text().then(x=>x?JSON.parse(x):null);}
  async authenticate(token){if(!token||token.length>4096)throw Error('Sign in to Jellyfin first.');const user=await this.request(token,'/Users/Me');if(!/^[a-f0-9]{32}$/i.test(user?.Id))throw Error('Jellyfin returned an invalid user.');return {id:user.Id,name:user.Name,admin:user.Policy?.IsAdministrator===true,token};}
+ async partyItems(owner,ids){
+  const items=[];
+  for(let start=0;start<ids.length;start+=200){
+   const page=await this.request(owner.token,`/Users/${owner.id}/Items`,{query:{Ids:ids.slice(start,start+200).join(','),IncludeItemTypes:'Audio',Fields:'PrimaryImageAspectRatio',EnableImageTypes:'Primary',Limit:'200'}});
+   if(!Array.isArray(page?.Items))throw Error('Jellyfin returned an incomplete shared queue.');
+   items.push(...page.Items);
+  }
+  return items;
+ }
  async songs(owner,force=false){const cached=this.cache.get(owner.id);if(!force&&cached&&cached.at>Date.now()-60000)return cached.items;const items=[];let offset=0,total;
  do{const page=await this.request(owner.token,`/Users/${owner.id}/Items`,{query:{IncludeItemTypes:'Audio',Recursive:'true',Fields:'Path,Artists,MediaStreams,Album,AlbumId,AlbumArtists,AlbumPrimaryImageTag,ArtistItems,ProviderIds',SortBy:'SortName',SortOrder:'Ascending',Limit:'500',StartIndex:String(offset)}});if(!Array.isArray(page?.Items)||!Number.isInteger(page.TotalRecordCount)||page.TotalRecordCount>100000||offset<page.TotalRecordCount&&!page.Items.length)throw Error('Jellyfin returned an incomplete music library.');items.push(...page.Items);offset+=page.Items.length;total=page.TotalRecordCount;}while(offset<total);this.cache.set(owner.id,{at:Date.now(),items});return items;}
  async find(owner,track,{relative}={}){const songs=await this.songs(owner,!!relative);return songs.find(s=>relative?s.Path===this.musicPath+'/'+relative.split('\\').join('/'):trackKey({title:s.Name,artists:s.Artists||[]})===trackKey(track))||null;}

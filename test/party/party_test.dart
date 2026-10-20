@@ -79,6 +79,7 @@ class Api implements PartyApi {
     'queue': [
       {
         'id': 'b' * 32,
+        'slot': 'first',
         'title': 'Shared song',
         'artist': 'Artist',
         'durationMs': 180000,
@@ -86,6 +87,7 @@ class Api implements PartyApi {
       },
       {
         'id': 'c' * 32,
+        'slot': 'second',
         'title': 'Next song',
         'artist': 'Artist',
         'durationMs': 180000,
@@ -129,6 +131,16 @@ void main() {
       );
       expect(native.server, https.server);
       expect(native.id, id);
+      final short = PartyInvite.parse(
+        'https://music.example/party/9a2jjgf4kr8m',
+      );
+      expect(short.isShort, true);
+      expect(
+        PartyInvite.parse(
+          'gaze://party/9a2jjgf4kr8m?server=https%3A%2F%2Fmusic.example',
+        ).id,
+        short.id,
+      );
       for (final link in [
         'http://music.example/party/$id#$secret',
         'https://user:password@music.example/party/$id#$secret',
@@ -201,6 +213,13 @@ void main() {
       expect(player.state.status, PlaybackStatus.playing);
       expect(player.loads, loads);
       expect(queue.state.shuffleEnabled, false);
+      expect(api.calls.last, endsWith('/command'));
+      expect(api.bodies.last?['action'], 'next');
+      await queue.previous();
+      expect(api.bodies.last?['action'], 'previous');
+      queue.removeAt(1);
+      await Future<void>.delayed(Duration.zero);
+      expect(api.bodies.last?['slot'], 'second');
       await guarded.setVolume(.3);
       expect(player.state.volume, .3);
       api.data = {...api.data, 'playing': false, 'positionMs': 24000};

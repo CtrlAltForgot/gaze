@@ -72,13 +72,20 @@ class PlaybackQueueController {
   Stream<PlaybackQueueState> get states => _states.stream;
 
   bool followingParty = false;
+  Future<void> Function(String, Map<String, dynamic>)? partyCommand;
 
   /// A follower mirrors the host order without starting local queue playback.
-  void updatePartyQueue(List<RemotePlaybackSource> items, int index) {
+  void updatePartyQueue(
+    List<RemotePlaybackSource> items,
+    int index, {
+    bool preserveModes = false,
+  }) {
     _replaceItems(items);
     _currentIndex = index;
-    _shuffleEnabled = false;
-    _repeatMode = PlaybackRepeatMode.off;
+    if (!preserveModes) {
+      _shuffleEnabled = false;
+      _repeatMode = PlaybackRepeatMode.off;
+    }
     _publish();
   }
 
@@ -204,7 +211,10 @@ class PlaybackQueueController {
   }
 
   Future<void> playAt(int index) async {
-    if (followingParty) return;
+    if (followingParty) {
+      await partyCommand?.call('playAt', {'index': index});
+      return;
+    }
     if (index < 0 || index >= _items.length) return;
     _currentIndex = index;
     _publish();
@@ -212,7 +222,10 @@ class PlaybackQueueController {
   }
 
   void removeAt(int index) {
-    if (followingParty) return;
+    if (followingParty) {
+      unawaited(partyCommand?.call('remove', {'index': index}));
+      return;
+    }
     if (index < 0 || index >= _items.length || index == _currentIndex) return;
     _originalItems.remove(_items.removeAt(index));
     if (index < _currentIndex) _currentIndex--;
@@ -220,7 +233,12 @@ class PlaybackQueueController {
   }
 
   void moveUpcoming(int oldIndex, int newIndex) {
-    if (followingParty) return;
+    if (followingParty) {
+      unawaited(
+        partyCommand?.call('move', {'index': oldIndex, 'to': newIndex}),
+      );
+      return;
+    }
     if (oldIndex <= _currentIndex ||
         newIndex <= _currentIndex ||
         oldIndex >= _items.length ||
@@ -239,7 +257,10 @@ class PlaybackQueueController {
   }
 
   void clearUpcoming() {
-    if (followingParty) return;
+    if (followingParty) {
+      unawaited(partyCommand?.call('clear', {}));
+      return;
+    }
     if (_currentIndex + 1 >= _items.length) return;
     final removed = _items.sublist(_currentIndex + 1).toSet();
     _items.removeRange(_currentIndex + 1, _items.length);
@@ -248,7 +269,10 @@ class PlaybackQueueController {
   }
 
   Future<void> previous({bool play = true}) async {
-    if (followingParty) return;
+    if (followingParty) {
+      await partyCommand?.call('previous', {});
+      return;
+    }
     if (_playbackController.state.position > previousRestartThreshold) {
       await _playbackController.seek(Duration.zero);
       return;
@@ -260,7 +284,10 @@ class PlaybackQueueController {
   }
 
   Future<void> next({bool play = true}) async {
-    if (followingParty) return;
+    if (followingParty) {
+      await partyCommand?.call('next', {});
+      return;
+    }
     if (!_state.hasNext) return;
     if (_currentIndex + 1 < _items.length) {
       _currentIndex++;

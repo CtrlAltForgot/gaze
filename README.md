@@ -15,7 +15,7 @@ Party Session. Built with Flutter, with an optional lightweight Node service.
 - Timed lyrics with click-to-seek, shown in the center alongside your queue.
 - Single-click to browse a playlist; double-click to play it, respecting shuffle.
 - Party Sessions: share an invite from the queue; friends join without a library
-  account and follow the host’s playback, with independent volume controls.
+  account add songs, skip, go back, and edit the shared queue, with independent volume controls.
 - Linux tray, media keys/MPRIS, integrated window controls, and `gaze://` invites.
 - Optional service integrations for imports and missing artwork.
 
@@ -45,7 +45,7 @@ signed or notarized. Native behavior still needs testing on macOS.
 
 To use your own library, select **Connect** and sign in to your Jellyfin server.
 To join a friend, open their invite or paste it into **Queue → Party Session**.
-Guests need no Jellyfin account. The host controls playback; leaving restores
+Guests need no Jellyfin account. Everyone can control playback and search the host’s library; leaving restores
 your own queue. Invite links grant access to that session’s queue until it ends
 or expires, so share them only with intended listeners.
 
@@ -104,7 +104,7 @@ service and its additional prerequisites are described in [server/README.md](ser
 ## Privacy and project status
 
 Account credentials use the operating system’s credential store. Guest tokens
-stay in memory; invitation secrets are carried in URL fragments. Library caches
+stay in memory. Short invitation codes grant access until the session ends. Library caches
 and audio stay out of this repository. LRCLIB can receive song metadata to find
 missing lyrics; no account credentials or audio are sent. Public artist-profile
 lookup is off by default. The optional missing-artwork search uses public music

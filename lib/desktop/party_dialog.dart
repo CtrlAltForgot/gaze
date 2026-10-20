@@ -73,8 +73,8 @@ class _PartyDialogState extends State<_PartyDialog> {
                     const SizedBox(height: 12),
                     Text(
                       party.hosting
-                          ? 'Share the invite with your friends. You control the music; everyone keeps their own volume.'
-                          : 'Playback follows the host. Your own queue will be here when you leave.',
+                          ? 'Share the invite with your friends. Everyone can add songs, skip, and edit the queue. Volume stays personal.'
+                          : 'Add songs and shape the queue together. Your own queue will be here when you leave.',
                     ),
                     const SizedBox(height: 20),
                     if (party.inviteUrl != null) ...[
