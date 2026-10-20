@@ -15,7 +15,7 @@ Party Session. Built with Flutter, with an optional lightweight Node service.
 - Timed lyrics with click-to-seek, shown in the center alongside your queue.
 - Single-click to browse a playlist; double-click to play it, respecting shuffle.
 - Party Sessions: share an invite from the queue; friends join without a library
-  account add songs, skip, go back, and edit the shared queue, with independent volume controls.
+  account, add songs, skip, go back, and edit the shared queue. Volume stays personal.
 - Linux tray, media keys/MPRIS, integrated window controls, and `gaze://` invites.
 - Optional service integrations for imports and missing artwork.
 
@@ -32,14 +32,15 @@ your user account, adds the application launcher, and registers Party Session
 links. Runtime requirements include GTK 3, libsecret, SQLite, and libmpv
 (`mpv-libs` on Fedora/Nobara; `libmpv2` on Ubuntu). No root access is needed by
 the installer; install missing runtime packages with your system’s package manager.
-The first preview Linux archive is built on Nobara 44; older distributions may
-need to build from source or use a compatible CI artifact.
+The standard Linux archive is built on Ubuntu 24.04. A separate Nobara 44
+archive includes the high-refresh Linux engine. Older distributions may need
+to build from source.
 
 **Windows:** extract the complete archive, keep its DLLs and data beside
 `gaze.exe`, and run it once to enable invitation links. Registration is for your
 current user only and requires no administrator access. The included
-`register-invites.ps1` can repair registration if needed. Windows
-builds require the Microsoft Visual C++ runtime.
+`register-invites.ps1` can repair registration if needed. The release ZIP
+includes the required Microsoft Visual C++ runtime files.
 
 **macOS:** use the macOS build artifact or build locally. Preview builds are not
 signed or notarized. Native behavior still needs testing on macOS.
