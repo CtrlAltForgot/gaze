@@ -130,7 +130,7 @@ export class Parties {
     const s = this.authorize(id, token);
     const q = String(query || '').trim().toLowerCase().slice(0, 100);
     if (q.length < 2) return {songs: []};
-    const items = await this.jellyfin.songs(s.owner);
+    const items = await (this.jellyfin.partySearch ? this.jellyfin.partySearch(s.owner, q) : this.jellyfin.songs(s.owner));
     this.authorize(id, token);
     return {songs: items.filter(item => item.Type === 'Audio' && (String(item.Name) + ' ' + (item.Artists || []).join(' ')).toLowerCase().includes(q)).slice(0, 40).map(item => ({id:item.Id, title:item.Name || 'Untitled', artist:(item.Artists || []).join('; '), durationMs:Math.round((item.RunTimeTicks || 0)/10000)}))};
   }

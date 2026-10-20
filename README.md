@@ -36,8 +36,9 @@ The first preview Linux archive is built on Nobara 44; older distributions may
 need to build from source or use a compatible CI artifact.
 
 **Windows:** extract the complete archive, keep its DLLs and data beside
-`gaze.exe`, and run it. To enable invitation links, run `register-invites.ps1`
-from that same directory. Registration is for your current user only. Windows
+`gaze.exe`, and run it once to enable invitation links. Registration is for your
+current user only and requires no administrator access. The included
+`register-invites.ps1` can repair registration if needed. Windows
 builds require the Microsoft Visual C++ runtime.
 
 **macOS:** use the macOS build artifact or build locally. Preview builds are not

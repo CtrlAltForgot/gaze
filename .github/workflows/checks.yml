@@ -13,7 +13,12 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg yt-dlp
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Matching downloader version
+        run: |
+          python3 -m venv "$RUNNER_TEMP/gaze-tools"
+          "$RUNNER_TEMP/gaze-tools/bin/pip" install yt-dlp==2026.8.19
+          echo "$RUNNER_TEMP/gaze-tools/bin" >> "$GITHUB_PATH"
       - run: node --test server/test/*.test.js
   desktop:
     strategy:

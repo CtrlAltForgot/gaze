@@ -5,6 +5,35 @@
 #include "flutter_window.h"
 #include "utils.h"
 
+namespace {
+// Register for the current user, so portable downloads can open party invites
+// after their first launch without requiring administrator privileges.
+void RegisterPartyProtocol() {
+  wchar_t path[32768];
+  const DWORD length = GetModuleFileNameW(nullptr, path, 32768);
+  if (length == 0 || length >= 32768) return;
+  const std::wstring executable(path, length);
+  const auto write = [](const wchar_t* subkey, const wchar_t* name,
+                        const std::wstring& value) {
+    HKEY key = nullptr;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, subkey, 0, nullptr, 0,
+                        KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS) {
+      return;
+    }
+    RegSetValueExW(key, name, 0, REG_SZ,
+                  reinterpret_cast<const BYTE*>(value.c_str()),
+                  static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(key);
+  };
+  write(L"Software\\Classes\\gaze", nullptr, L"URL:gaze Party Session");
+  write(L"Software\\Classes\\gaze", L"URL Protocol", L"");
+  write(L"Software\\Classes\\gaze\\DefaultIcon", nullptr,
+        L"\"" + executable + L"\",0");
+  write(L"Software\\Classes\\gaze\\shell\\open\\command", nullptr,
+        L"\"" + executable + L"\" \"%1\"");
+}
+}  // namespace
+
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
   // Attach to console when present (e.g., 'flutter run') or create a
@@ -16,6 +45,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  RegisterPartyProtocol();
 
   flutter::DartProject project(L"data");
 

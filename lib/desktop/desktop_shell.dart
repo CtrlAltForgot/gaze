@@ -1,4 +1,5 @@
 import '../party/party_controller.dart';
+import 'party_listening_view.dart';
 import 'artist_links.dart';
 import '../design/gaze_motion.dart';
 import 'dart:async';
@@ -121,8 +122,10 @@ class _DesktopShellState extends State<DesktopShell> {
   bool _partyWasActive = false;
   void _partyChanged() {
     final active = widget.partyController?.active == true;
-    if (mounted && active && !_partyWasActive) {
-      setState(() => _queueVisible = true);
+    if (mounted && active != _partyWasActive) {
+      setState(() {
+        if (active) _queueVisible = true;
+      });
     }
     _partyWasActive = active;
   }
@@ -492,7 +495,13 @@ class _DesktopShellState extends State<DesktopShell> {
 
   Widget _centerContent() => GazePageStack(
     index: _lyricsVisible ? 1 : 0,
-    children: [_libraryContent(), if (_lyricsVisited) _lyrics()],
+    children: [
+      widget.partyController?.following == true &&
+              _destination == _LibraryDestination.home
+          ? PartyListeningView(party: widget.partyController!)
+          : _libraryContent(),
+      if (_lyricsVisited) _lyrics(),
+    ],
   );
 
   Future<void> _playSongs(List<SongSummary> songs, int? startIndex) {

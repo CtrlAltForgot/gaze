@@ -44,6 +44,7 @@ class PartyController extends ChangeNotifier {
   PlaybackSnapshot? _savedPlayback;
   int _lastSuccess = 0;
   final Map<String, Uint8List> _artwork = {};
+  final Map<String, Future<Uint8List?>> _artworkRequests = {};
   String get hostName => snapshot?['hostName'] as String? ?? 'Your host';
   List<String> get listeners =>
       (snapshot?['listeners'] as List? ?? []).whereType<String>().toList();
@@ -351,6 +352,21 @@ class PartyController extends ChangeNotifier {
     );
   }
 
+  Future<Uint8List?> artworkFor(RemotePlaybackSource source) {
+    final id = source.uri.pathSegments.last;
+    if (_artwork.containsKey(id)) return SynchronousFuture(_artwork[id]);
+    if (!active) return SynchronousFuture(null);
+    if (_artworkRequests.length >= 48)
+      _artworkRequests.remove(_artworkRequests.keys.first);
+    return _artworkRequests.putIfAbsent(
+      id,
+      () => api.artwork(
+        _server!.replace(path: '/v1/parties/$_id/artwork/$id'),
+        _token!,
+      ),
+    );
+  }
+
   Future<List<Map<String, dynamic>>> search(String query) async {
     if (!active) return [];
     final result = await api.request(
@@ -420,6 +436,7 @@ class PartyController extends ChangeNotifier {
     _revision = -1;
     _hostCommandVersion = 0;
     _artwork.clear();
+    _artworkRequests.clear();
     // Let an already-started engine load finish before restoring local music.
     // Its generation check prevents it from playing or seeking afterward.
     try {

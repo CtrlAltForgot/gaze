@@ -3,6 +3,11 @@ export class Jellyfin{
  constructor(origin,{fetchImpl=fetch,musicPath='/data/music/gaze Imports'}={}){this.origin=new URL(origin);if(!['http:','https:'].includes(this.origin.protocol)||this.origin.username||this.origin.password)throw Error('Invalid Jellyfin origin.');this.fetch=fetchImpl;this.musicPath=musicPath;this.cache=new Map();this.lastMusicRefresh=0;}
  async request(token,route,{method='GET',query={},body}={}){const u=new URL(this.origin);u.pathname=u.pathname.replace(/\/$/,'')+route;u.search=new URLSearchParams(query).toString();let response;try{response=await this.fetch(u,{method,headers:{'X-Emby-Token':token,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000),redirect:'error'});}catch{throw Error('Jellyfin is unavailable. Imports will wait for the server.');}if(!response.ok){const e=Error(response.status===401||response.status===403?'Sign in to Jellyfin again to resume imports.':'Jellyfin could not save this change.');e.status=response.status;throw e;}return response.status===204?null:await response.text().then(x=>x?JSON.parse(x):null);}
  async authenticate(token){if(!token||token.length>4096)throw Error('Sign in to Jellyfin first.');const user=await this.request(token,'/Users/Me');if(!/^[a-f0-9]{32}$/i.test(user?.Id))throw Error('Jellyfin returned an invalid user.');return {id:user.Id,name:user.Name,admin:user.Policy?.IsAdministrator===true,token};}
+ async partySearch(owner,query){
+  const page=await this.request(owner.token,`/Users/${owner.id}/Items`,{query:{SearchTerm:query,IncludeItemTypes:'Audio',Recursive:'true',Limit:'40'}});
+  if(!Array.isArray(page?.Items))throw Error('Music search is unavailable.');
+  return page.Items;
+ }
  async partyItems(owner,ids){
   const items=[];
   for(let start=0;start<ids.length;start+=200){

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import '../party/party_controller.dart';
 import 'party_dialog.dart';
 import 'party_song_search.dart';
@@ -37,13 +38,35 @@ class QueuePanel extends StatelessWidget {
     }
   }
 
-  Widget _cover(RemotePlaybackSource source) => LibraryArtwork(
-    connectionController: connectionController,
-    itemId: source.artworkId,
-    imageTag: source.artworkTag,
-    bytes: source.artworkBytes,
-    dimension: 44,
-  );
+  Widget _cover(RemotePlaybackSource source) =>
+      partyController?.following == true
+      ? FutureBuilder<Uint8List?>(
+          future: partyController!.artworkFor(source),
+          initialData: source.artworkBytes,
+          builder: (context, snapshot) => ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: snapshot.data == null
+                ? const SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Icon(Icons.music_note_rounded),
+                  )
+                : Image.memory(
+                    snapshot.data!,
+                    width: 44,
+                    height: 44,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
+          ),
+        )
+      : LibraryArtwork(
+          connectionController: connectionController,
+          itemId: source.artworkId,
+          imageTag: source.artworkTag,
+          bytes: source.artworkBytes,
+          dimension: 44,
+        );
   @override
   Widget build(BuildContext context) => Material(
     color: GazeColors.navigation.withValues(alpha: .68),
